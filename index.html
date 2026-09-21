@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>The Ledger — A Life, Kept</title>
+<title>The Ledger Life — A Life, Kept</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#141414">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="The Ledger">
+<meta name="apple-mobile-web-app-title" content="The Ledger Life">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -33,10 +33,11 @@
 }
 *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
 html,body{height:100%;}
-body{ margin:0; background:var(--bg); color:var(--text); font-family:var(--sans); display:flex; justify-content:center; }
+html{ overscroll-behavior-y: contain; }
+body{ margin:0; background:var(--bg); color:var(--text); font-family:var(--sans); display:flex; justify-content:center; overscroll-behavior-y: contain; }
 #app{ width:100%; max-width:480px; min-height:100vh; background:var(--bg); color:var(--text); display:flex; flex-direction:column; position:relative; border-left:1px solid var(--border); border-right:1px solid var(--border); }
 
-#intro{ flex:1; display:flex; flex-direction:column; justify-content:center; padding:32px 24px; overflow-y:auto;
+#intro{ flex:1; display:flex; flex-direction:column; justify-content:center; padding:32px 24px; overflow-y:auto; overscroll-behavior-y: contain;
   background: radial-gradient(circle at 20% 15%, rgba(198,161,91,0.08), transparent 40%), var(--bg); }
 .intro-eyebrow{ font-family:var(--mono); font-size:12px; letter-spacing:.08em; color:var(--gold); margin-bottom:6px;}
 #intro h1{ font-family:var(--serif); font-weight:600; font-size:38px; line-height:1.05; margin:0 0 10px; }
@@ -75,7 +76,7 @@ body{ margin:0; background:var(--bg); color:var(--text); font-family:var(--sans)
 .stat .bar{ height:5px; background:rgba(0,0,0,0.12); border-radius:3px; overflow:hidden; }
 .stat .fill{ height:100%; border-radius:3px; }
 
-#main{ flex:1; overflow-y:auto; padding:16px 16px 12px; }
+#main{ flex:1; overflow-y:auto; padding:16px 16px 12px; overscroll-behavior-y: contain; }
 .section-title{ font-family:var(--serif); font-size:15px; font-weight:600; color:var(--gold); margin:0 0 12px;
   padding-bottom:8px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; }
 .card{ background:var(--surface); border:1px solid var(--border); border-radius:5px; padding:14px; margin-bottom:10px; }
@@ -114,11 +115,11 @@ body{ margin:0; background:var(--bg); color:var(--text); font-family:var(--sans)
 #modal-backdrop{ position:absolute; inset:0; background:rgba(10,11,14,0.72); display:none; align-items:flex-end; justify-content:center; z-index:50; }
 #modal-backdrop.show{ display:flex; }
 #modal{ background:var(--surface); border:1px solid var(--border); border-top:2px solid var(--gold);
-  width:100%; max-width:480px; border-radius:12px 12px 0 0; padding:22px 20px 26px; max-height:80vh; overflow-y:auto; }
+  width:100%; max-width:480px; border-radius:12px 12px 0 0; padding:22px 20px 26px; max-height:80vh; overflow-y:auto; overscroll-behavior-y: contain; }
 #modal h3{ font-family:var(--serif); margin:0 0 4px; font-size:19px; }
 #modal .modal-sub{ color:var(--muted); font-size:13px; margin-bottom:16px; }
 
-#deathscreen{ position:absolute; inset:0; background:var(--bg); z-index:60; display:none; flex-direction:column; padding:36px 24px; overflow-y:auto;}
+#deathscreen{ position:absolute; inset:0; background:var(--bg); z-index:60; display:none; flex-direction:column; padding:36px 24px; overflow-y:auto; overscroll-behavior-y: contain;}
 #deathscreen.show{ display:flex; }
 #deathscreen h1{ font-family:var(--serif); font-size:30px; margin:0 0 6px; color:var(--gold); }
 
@@ -133,9 +134,27 @@ body{ margin:0; background:var(--bg); color:var(--text); font-family:var(--sans)
   82%{ opacity:1; }
   100%{ opacity:0; visibility:hidden; pointer-events:none; }
 }
+#toast-stack{
+  position:fixed; left:0; right:0; bottom:82px; z-index:99999;
+  display:flex; flex-direction:column; align-items:center; gap:8px;
+  pointer-events:none; padding:0 20px;
+}
+.toast{
+  max-width:420px; width:100%;
+  background:var(--surface2); color:var(--text);
+  border:1px solid var(--gold); border-left:3px solid var(--gold);
+  border-radius:6px; padding:12px 16px; font-size:14px; line-height:1.4;
+  box-shadow:0 12px 30px -10px rgba(0,0,0,.6);
+  opacity:0; transform:translateY(12px);
+  animation: toastIn .22s ease forwards;
+}
+.toast.leaving{ animation: toastOut .22s ease forwards; }
+@keyframes toastIn{ to{ opacity:1; transform:translateY(0); } }
+@keyframes toastOut{ to{ opacity:0; transform:translateY(12px); } }
 </style>
 </head>
 <body>
+<div id="toast-stack"></div>
 <div id="app">
 
   <div id="splash-screen" style="position:fixed; inset:0; z-index:9999; background:#0d1014; display:flex; align-items:center; justify-content:center; animation:splashHold 2.2s ease forwards;">
@@ -143,9 +162,9 @@ body{ margin:0; background:var(--bg); color:var(--text); font-family:var(--sans)
   </div>
 
   <div id="title-screen" style="display:none; min-height:100vh; position:relative; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:32px 24px;">
-    <div style="position:relative; display:inline-block;">
-      <span style="position:absolute; top:-16px; left:50px; font-family:var(--serif); font-weight:500; font-size:13px; color:var(--gold); opacity:.75; letter-spacing:.04em;">The</span>
-      <div style="font-family:var(--serif); font-weight:700; font-size:64px; letter-spacing:.02em; color:var(--gold); line-height:1;">LEDGER</div>
+    <div id="title-flourish-wrap" style="position:relative; display:inline-block;">
+      <span id="title-the-flourish" style="position:absolute; top:-16px; left:54px; font-family:var(--serif); font-weight:500; font-size:13px; color:var(--gold); opacity:.75; letter-spacing:.04em;">The</span>
+      <div style="font-family:var(--serif); font-weight:700; font-size:64px; letter-spacing:.02em; color:var(--gold); line-height:1;">L<span id="title-e-target">E</span>DGER LIFE</div>
     </div>
     <div style="font-family:var(--serif); font-weight:500; font-size:18px; color:var(--text); margin-top:10px; opacity:.85;">A Life, Kept.</div>
     <p class="sub" style="max-width:300px; font-size:13px; color:var(--muted); line-height:1.5;">A life is a ledger of choices, balances, and risks — from your first cry to whatever you build after.</p>
@@ -163,7 +182,7 @@ body{ margin:0; background:var(--bg); color:var(--text); font-family:var(--sans)
   </div>
 
   <div id="intro" style="display:none;">
-    <div class="intro-eyebrow">THE LEDGER — A LIFE, KEPT</div>
+    <div class="intro-eyebrow">THE LEDGER LIFE — A LIFE, KEPT</div>
     <h1>Open a new<br>account.</h1>
     <p class="sub">A life is a ledger of choices, balances, and risks — from your first cry to whatever you build after. Fill in the first entry.</p>
     <div class="field">
@@ -651,6 +670,20 @@ function randomAppearance(){
 if("scrollRestoration" in history){ try{ history.scrollRestoration = "manual"; }catch(e){} }
 let S = null;
 const APP_VERSION = "1.0.0";
+function showToast(message, duration){
+  const stack = document.getElementById("toast-stack");
+  if(!stack){ console.log(message); return; }
+  const el = document.createElement("div");
+  el.className = "toast";
+  el.textContent = message;
+  stack.appendChild(el);
+  const remove = ()=>{
+    el.classList.add("leaving");
+    setTimeout(()=>{ el.remove(); }, 220);
+  };
+  setTimeout(remove, duration || 3200);
+  el.addEventListener("click", remove);
+}
 const SAVE_KEY = "ledger-life-save-v2";
 const GOOGLE_ACCOUNT_KEY = "ledger-google-account-v1";
 // Replace with your own OAuth Client ID from https://console.cloud.google.com/apis/credentials
@@ -759,7 +792,7 @@ async function purchasePlayProduct(productKey, onSuccess){
   if(!service){
     // Not running inside the Play Store app (e.g. testing in a regular browser or the plain PWA).
     // Purchases aren't possible here, so let the caller decide how to handle it.
-    alert("Purchases are only available when this app is installed from the Google Play Store.");
+    showToast("Purchases are only available when this app is installed from the Google Play Store.");
     return;
   }
   try{
@@ -775,7 +808,7 @@ async function purchasePlayProduct(productKey, onSuccess){
     if(service.acknowledge) await service.acknowledge(response.details.purchaseToken || response.details.token, "onetime");
     onSuccess();
   }catch(e){
-    if(e && e.name !== "AbortError") alert("Purchase didn't go through. Please try again.");
+    if(e && e.name !== "AbortError") showToast("Purchase didn't go through. Please try again.");
   }
 }
 
@@ -1075,7 +1108,7 @@ function openWeddingVenueModal(){
   document.querySelectorAll("#modal [data-venue]").forEach(btn=>{
     btn.onclick = ()=>{
       const venue = WEDDING_VENUES.find(v=>v.id===btn.dataset.venue);
-      if(S.money<venue.cost){ alert("Not enough cash for this venue."); return; }
+      if(S.money<venue.cost){ showToast("Not enough cash for this venue."); return; }
       S.money -= venue.cost;
       S.relationship.status="married"; S._everMarried=true; S.relationship.venue=venue.name;
       adjStat("happiness",venue.happiness); S.relationship.meter=clamp(S.relationship.meter+15,0,100);
@@ -1102,7 +1135,7 @@ function openProposalModal(){
   `;
   openModal(body);
   const doPropose = (ringType, cost, acceptChance)=>{
-    if(cost>0 && S.money<cost){ alert("Not enough cash."); return; }
+    if(cost>0 && S.money<cost){ showToast("Not enough cash."); return; }
     if(cost>0) S.money -= cost;
     if(chance(acceptChance)){
       S.relationship.status="engaged"; S.relationship.ring=ringType;
@@ -1140,7 +1173,7 @@ function openChangeBeliefModal(){
   };
   document.getElementById("found-religion-btn").onclick = ()=>{
     const val = document.getElementById("own-religion-input").value.trim();
-    if(!val){ alert("Give your religion a name first."); return; }
+    if(!val){ showToast("Give your religion a name first."); return; }
     S.religion = val; S.ownReligion = true;
     log(`You founded a new religion: ${val}.`); closeModal(); renderAll();
   };
@@ -1192,7 +1225,7 @@ function openRenameModal(){
   document.getElementById("rename-confirm-btn").onclick = ()=>{
     const val = document.getElementById("rename-input").value.trim();
     if(!val){ closeModal(); return; }
-    if(S.money<500){ alert("Not enough cash for the filing fee."); return; }
+    if(S.money<500){ showToast("Not enough cash for the filing fee."); return; }
     S.money -= 500;
     S.pendingNameChange = {newName: val, submittedAge: S.age};
     log(`You filed an application to change your name to "${val}". It'll be a year before you hear back.`);
@@ -1222,7 +1255,7 @@ function openAppearanceModal(){
   `;
   openModal(body);
   document.getElementById("save-appearance-btn").onclick = ()=>{
-    if(S.money<100){ alert("Not enough cash."); return; }
+    if(S.money<100){ showToast("Not enough cash."); return; }
     S.money -= 100;
     S.appearance.skin = document.getElementById("ap-skin").value;
     S.appearance.hairStyle = document.getElementById("ap-hairstyle").value;
@@ -1333,7 +1366,7 @@ function openDLCModal(){
   const ttBtn = document.getElementById("time-travel-btn");
   if(ttBtn) ttBtn.onclick = ()=>{
     const target = Number(document.getElementById("time-travel-age").value);
-    if(isNaN(target) || target<0 || target>120){ alert("Enter an age between 0 and 120."); return; }
+    if(isNaN(target) || target<0 || target>120){ showToast("Enter an age between 0 and 120."); return; }
     S.age = target; log(`⏳ You traveled through time to age ${target}.`);
     closeModal(); renderAll();
   };
@@ -1387,6 +1420,7 @@ function openSettingsModal(){
       <button class="btn ${S.dlc?'secondary':''}" id="settings-dlc-btn" style="margin-top:10px;">${S.dlc?"Manage":"Unlock DLC"}</button></div>
     <div class="card"><div class="card-row"><div class="card-title">Achievements</div><div class="card-sub">${unlocked}/${ACHIEVEMENTS.length}</div></div>
       <button class="btn secondary" id="settings-ach-btn" style="margin-top:10px;">View</button></div>
+    <div style="text-align:center; margin-top:14px; font-family:var(--mono); font-size:11px; color:#57523f;">Created by Aethelgard · v${APP_VERSION}</div>
     <button class="btn secondary" id="close-modal-btn" style="margin-top:6px;">Close</button>
   `;
   openModal(body);
@@ -1454,7 +1488,7 @@ function offerLegacy(reason){
   const aliveKids = S.children.filter(c=>c.alive);
   const hasSpouse = S.relationship.status==="married";
   if(aliveKids.length===0 && !hasSpouse){
-    if(reason==="death"){ showDeath(); } else { alert("You have no heirs yet to carry on your legacy."); }
+    if(reason==="death"){ showDeath(); } else { showToast("You have no heirs yet to carry on your legacy."); }
     return;
   }
   const body = `
@@ -1684,7 +1718,7 @@ function renderLife(){
         <button class="small-btn" id="beg-btn" ${begCapped?'disabled':''}>Beg for Money [${S.begThisYear||0}/5]</button>
       </div></div>`);
     homelessCard.querySelector("#shelter-btn").onclick=()=>{
-      if(S.money<2000){ alert("Not enough cash."); return; }
+      if(S.money<2000){ showToast("Not enough cash."); return; }
       S.money -= 2000; S.homeless=false; S.rentalPlan={id:"r1",name:"Studio Rental",cost:2500};
       log("You scraped together enough to move into a small rental and get off the streets.");
       renderAll();
@@ -1736,7 +1770,7 @@ function renderLife(){
     wrap.appendChild(card);
     card.querySelector("#date-btn").onclick = ()=>{
       if(partnerCapped) return;
-      if(S.money<dateCost){ alert("Not enough cash for a date."); return; }
+      if(S.money<dateCost){ showToast("Not enough cash for a date."); return; }
       S.money -= dateCost; S.partnerThisYear=(S.partnerThisYear||0)+1;
       S.relationship.meter=clamp(S.relationship.meter+rand(3,10),0,100); adjStat("happiness",5);
       log(`You took ${S.relationship.partner} out. A good night.`); renderAll();
@@ -1744,7 +1778,7 @@ function renderLife(){
     card.querySelector("#gift-btn").onclick = ()=>{
       if(partnerCapped) return;
       const cost = rand(50,500);
-      if(S.money<cost){ alert("Not enough cash for a gift."); return; }
+      if(S.money<cost){ showToast("Not enough cash for a gift."); return; }
       S.money -= cost; S.partnerThisYear=(S.partnerThisYear||0)+1;
       S.relationship.meter=clamp(S.relationship.meter+rand(4,12),0,100); adjStat("happiness",4);
       log(`You surprised ${S.relationship.partner} with a gift worth ${fmt(cost)}.`); renderAll();
@@ -1756,7 +1790,7 @@ function renderLife(){
     };
     const prenupBtn = card.querySelector("#prenup-btn");
     if(prenupBtn) prenupBtn.onclick = ()=>{
-      if(S.money<1000){ alert("Not enough cash."); return; }
+      if(S.money<1000){ showToast("Not enough cash."); return; }
       S.money -= 1000; S.relationship.prenup = true;
       log(`You and ${S.relationship.partner} signed a prenup.`); renderAll();
     };
@@ -1897,7 +1931,7 @@ function renderLife(){
       renderAll();
     };
     card.querySelector("#meet-app-btn").onclick = ()=>{
-      if(S.money<20){ alert("Not enough cash."); return; }
+      if(S.money<20){ showToast("Not enough cash."); return; }
       S.money-=20;
       const r = meetSomeone(0.45, 15, 35, "app");
       if(r){ log(r.royal?`You matched with ${r.name} on Tinder — royalty, no less!`:`You matched with ${r.name} on Tinder.`); adjStat("happiness", r.royal?12:6); }
@@ -1914,7 +1948,7 @@ function renderLife(){
         <div class="card-sub">${S.relationship.status==="married"?`Adopt as a family with ${S.relationship.partner}.`:"Adopt on your own."}</div>
         <button class="small-btn gold" id="adopt-btn" style="margin-top:8px;">Adopt a Child (${fmt(15000)})</button></div>`);
       adoptCard.querySelector("#adopt-btn").onclick = ()=>{
-        if(S.money<15000){ alert("Not enough cash."); return; }
+        if(S.money<15000){ showToast("Not enough cash."); return; }
         S.money-=15000; const childGender2 = chance(0.5)?"male":"female";
         const child = {name:`${randomFirst(childGender2)} ${surnameOf(S.name)}`, age:0, alive:true, gender:childGender2};
         S.children.push(child); S._hadChildThisAge=true; adjStat("happiness",12);
@@ -1996,7 +2030,7 @@ function renderLife(){
           <button class="small-btn gold" data-payoff="${idx}">Pay Them Off (${fmt(Math.round(en.hostility*300))})</button>
         </div></div>`);
       ec.querySelector("[data-amends]").onclick=()=>{
-        if(S.money<500){ alert("Not enough cash."); return; }
+        if(S.money<500){ showToast("Not enough cash."); return; }
         S.money-=500;
         if(chance(0.4)){ en.hostility=clamp(en.hostility-rand(15,30),0,100); log(`You reached out to ${en.name} — it helped, a little.`); }
         else { log(`You tried to make peace with ${en.name}, but they weren't having it.`); }
@@ -2005,7 +2039,7 @@ function renderLife(){
       };
       ec.querySelector("[data-payoff]").onclick=()=>{
         const cost = Math.round(en.hostility*300);
-        if(S.money<cost){ alert("Not enough cash."); return; }
+        if(S.money<cost){ showToast("Not enough cash."); return; }
         S.money-=cost; S.enemies.splice(idx,1);
         log(`You paid off ${en.name} to squash the beef for good.`); renderAll();
       };
@@ -2090,7 +2124,7 @@ function renderLife(){
         renderAll();
         return;
       }
-      if(S.money<4000){ alert("Not enough cash."); return; }
+      if(S.money<4000){ showToast("Not enough cash."); return; }
       S.money-=4000; adjStat("happiness",15); S.karma=clamp(S.karma+10,-100,100);
       if(chance(0.3)){ adjStat("smarts",4); log(`Your pilgrimage was a profound experience — you came back changed.`); }
       else { log(`You went on a pilgrimage and returned feeling renewed.`); }
@@ -2131,8 +2165,8 @@ function renderLife(){
   charityCard.querySelector("#charity-btn").onclick=()=>{
     if((S.charityThisYear||0)>=2) return;
     const amt = Math.floor(Number(charityCard.querySelector("#charity-amt").value))||0;
-    if(amt<=0){ alert("Enter an amount to donate."); return; }
-    if(S.money<amt){ alert("Not enough cash."); return; }
+    if(amt<=0){ showToast("Enter an amount to donate."); return; }
+    if(S.money<amt){ showToast("Not enough cash."); return; }
     S.money-=amt; S.charityThisYear=(S.charityThisYear||0)+1;
     S.totalDonated = (S.totalDonated||0)+amt;
     S.karma=clamp(S.karma+Math.min(12,Math.round(amt/200)),-100,100); adjStat("happiness",6);
@@ -2194,21 +2228,21 @@ function renderLife(){
   };
   mb.querySelector("#spa-btn").onclick=()=>{
     if(S.age<14 || mbaCap('spa',3)) return; mba.spa=(mba.spa||0)+1;
-    if(S.money<300){ alert("Not enough cash."); return; }
+    if(S.money<300){ showToast("Not enough cash."); return; }
     S.money-=300; adjStat("happiness",8); adjStat("health",5); adjStat("looks",2);
     log("You spent the day at the spa, relaxed and recharged."); renderAll();
   };
   const dentistBtn = mb.querySelector("#dentist-btn");
   if(dentistBtn) dentistBtn.onclick=()=>{
     if(mbaCap('dentist',2)) return; mba.dentist=(mba.dentist||0)+1;
-    if(!parentsPay){ if(S.money<150){ alert("Not enough cash."); return; } S.money-=150; }
+    if(!parentsPay){ if(S.money<150){ showToast("Not enough cash."); return; } S.money-=150; }
     adjStat("looks",2); adjStat("health",2);
     log(`You went in for a dentist visit${parentsPay?', paid for by your parents':''}.`);
     renderAll();
   };
   const surgeryBtn = mb.querySelector("#surgery-btn");
   if(surgeryBtn) surgeryBtn.onclick=()=>{
-    if(S.money<12000){ alert("Not enough cash."); return; }
+    if(S.money<12000){ showToast("Not enough cash."); return; }
     S.money-=12000;
     if(chance(0.85)){ adjStat("looks",rand(8,18),true); log("Your surgery went smoothly — you're looking great."); }
     else { adjStat("looks",-5,true); adjStat("health",-8); log("Complications from the surgery left you worse for wear."); }
@@ -2217,14 +2251,14 @@ function renderLife(){
   const therapyBtn = mb.querySelector("#therapy-btn");
   if(therapyBtn) therapyBtn.onclick=()=>{
     if(mbaCap('therapy',4)) return; mba.therapy=(mba.therapy||0)+1;
-    if(!parentsPay){ if(S.money<150){ alert("Not enough cash."); return; } S.money-=150; }
+    if(!parentsPay){ if(S.money<150){ showToast("Not enough cash."); return; } S.money-=150; }
     adjStat("happiness",10); log(`You had a therapy session${parentsPay?', paid for by your parents':''} — it helped to talk things through.`);
     renderAll();
   };
   const doctorBtn = mb.querySelector("#doctor-btn");
   if(doctorBtn) doctorBtn.onclick=()=>{
     if(mbaCap('doctor',3)) return; mba.doctor=(mba.doctor||0)+1;
-    if(!parentsPay){ if(S.money<200){ alert("Not enough cash."); return; } S.money-=200; }
+    if(!parentsPay){ if(S.money<200){ showToast("Not enough cash."); return; } S.money-=200; }
     if(S.illness){
       if(chance(0.55)){
         log(`The doctor successfully treated your ${S.illness.name.toLowerCase()}.`);
@@ -2254,7 +2288,7 @@ function renderLife(){
     </div>`);
   const joinBtn = gymCard.querySelector("#join-gym-btn");
   if(joinBtn) joinBtn.onclick=()=>{
-    if(!parentsPay){ if(S.money<gymCost){ alert("Not enough cash."); return; } S.money-=gymCost; }
+    if(!parentsPay){ if(S.money<gymCost){ showToast("Not enough cash."); return; } S.money-=gymCost; }
     S.gymMembership=true; log(`You joined the gym${parentsPay?' (your parents covered the membership)':''}.`); renderAll();
   };
   const cancelBtn = gymCard.querySelector("#cancel-gym-btn");
@@ -2341,7 +2375,7 @@ function renderLife(){
     </div>`);
   nightCard.querySelector("#club-btn").onclick=()=>{
     if(S.age<18) return;
-    if(S.money<120){ alert("Not enough cash."); return; }
+    if(S.money<120){ showToast("Not enough cash."); return; }
     S.money-=120; adjStat("happiness",7);
     if(chance(0.1)){ adjStat("health",-4); log("You went clubbing and it got a little wild — you're feeling it today."); }
     else { log("You had a great night out clubbing."); }
@@ -2350,7 +2384,7 @@ function renderLife(){
   nightCard.querySelector("#golf-btn").onclick=()=>{
     if(S.age<8 || (S.golfThisYear||0)>=3) return;
     const cost = countryClubMember?50:250;
-    if(S.money<cost){ alert("Not enough cash."); return; }
+    if(S.money<cost){ showToast("Not enough cash."); return; }
     S.money-=cost; S.golfThisYear=(S.golfThisYear||0)+1; adjStat("happiness",6); adjStat("health",2);
     if(chance(0.15)){ const bonus=rand(2000,15000); S.money+=bonus; log(`You made a valuable connection on the course, worth ${fmt(bonus)}.`); }
     else { log("A relaxing round of golf."); }
@@ -2358,13 +2392,13 @@ function renderLife(){
   };
   nightCard.querySelector("#ccmember-btn").onclick=()=>{
     if(S.age<18 || countryClubMember) return;
-    if(S.money<5000){ alert("Not enough cash."); return; }
+    if(S.money<5000){ showToast("Not enough cash."); return; }
     S.money-=5000; S.countryClubMember=true; adjStat("happiness",8);
     log("You joined the country club."); renderAll();
   };
   nightCard.querySelector("#billiard-btn").onclick=()=>{
     if(S.age<10) return;
-    if(S.money<30){ alert("Not enough cash."); return; }
+    if(S.money<30){ showToast("Not enough cash."); return; }
     S.money-=30; adjStat("happiness",5);
     if(chance(0.2)){ const winnings=rand(50,400); S.money+=winnings; log(`You hustled a game of pool and walked away up ${fmt(winnings)}.`); }
     else { log("You played a relaxing game of billiards."); }
@@ -2372,7 +2406,7 @@ function renderLife(){
   };
   nightCard.querySelector("#cinema-btn").onclick=()=>{
     if(S.age<5) return;
-    if(S.money<40){ alert("Not enough cash."); return; }
+    if(S.money<40){ showToast("Not enough cash."); return; }
     S.money-=40; adjStat("happiness",6);
     log("You caught a movie at the cinema.");
     if(S.relationship.status==="single" && S.age>=16 && chance(0.08)){
@@ -2400,7 +2434,7 @@ function renderLife(){
     wrap.appendChild(moveCard);
     moveCard.querySelector("#move-btn").onclick = ()=>{
       const dest = moveCard.querySelector("#move-select").value;
-      if(S.money < 3000){ alert("Not enough cash to cover the move."); return; }
+      if(S.money < 3000){ showToast("Not enough cash to cover the move."); return; }
       S.money -= 3000; S.country = dest; adjStat("happiness", rand(-5,15));
       S.countriesLived = S.countriesLived||[]; if(!S.countriesLived.includes(dest)) S.countriesLived.push(dest);
       log(`You packed up and moved to ${dest}.`); renderAll();
@@ -2453,20 +2487,20 @@ function renderBank(){
   wrap.appendChild(sav);
   sav.querySelector("#dep-btn").onclick = ()=>{
     const amt = Number(sav.querySelector("#dep-amt").value)||0;
-    if(amt<=0||amt>S.money){ alert("Invalid amount."); return; }
+    if(amt<=0||amt>S.money){ showToast("Invalid amount."); return; }
     S.money-=amt; S.savings+=amt; S.savingsOn=true; renderAll();
   };
   sav.querySelector("#wd-btn").onclick = ()=>{
     const amt = Number(sav.querySelector("#dep-amt").value)||0;
-    if(amt<=0||amt>S.savings){ alert("Invalid amount."); return; }
+    if(amt<=0||amt>S.savings){ showToast("Invalid amount."); return; }
     S.savings-=amt; S.money+=amt; renderAll();
   };
   sav.querySelector("#wd-all-btn").onclick = ()=>{
-    if(S.savings<=0){ alert("Nothing to withdraw."); return; }
+    if(S.savings<=0){ showToast("Nothing to withdraw."); return; }
     S.money += S.savings; S.savings = 0; renderAll();
   };
   sav.querySelector("#dep-all-btn").onclick = ()=>{
-    if(S.money<=0){ alert("Nothing to deposit."); return; }
+    if(S.money<=0){ showToast("Nothing to deposit."); return; }
     S.savings += S.money; S.money = 0; S.savingsOn=true; renderAll();
   };
 
@@ -2478,7 +2512,7 @@ function renderBank(){
         <div class="card-sub">A contact can set you up with a foreign shell account — money kept there is laundered and out of reach of any seizure. Opening one isn't cheap.</div>
         <button class="small-btn gold" id="open-overseas-btn" style="margin-top:8px;" ${S.money<OVERSEAS_OPEN_COST?'disabled':''}>Open Overseas Account (${fmt(OVERSEAS_OPEN_COST)})</button></div>`);
       openCard.querySelector("#open-overseas-btn").onclick=()=>{
-        if(S.money<OVERSEAS_OPEN_COST){ alert("Not enough cash."); return; }
+        if(S.money<OVERSEAS_OPEN_COST){ showToast("Not enough cash."); return; }
         S.money -= OVERSEAS_OPEN_COST; S.overseasOpened = true;
         log(`You paid ${fmt(OVERSEAS_OPEN_COST)} to open an account overseas. Now you just need to fill it.`);
         renderAll();
@@ -2495,8 +2529,8 @@ function renderBank(){
         </div>
         <div class="card-sub" style="margin-top:6px;">A cut goes to the people who move it for you, and there's always some risk of it being traced.</div></div>`);
       const moveOverseas = (amt)=>{
-        if(amt<=0){ alert("Enter an amount to move."); return; }
-        if(S.money<amt){ alert("Not enough cash."); return; }
+        if(amt<=0){ showToast("Enter an amount to move."); return; }
+        if(S.money<amt){ showToast("Not enough cash."); return; }
         S.money -= amt;
         const fee = Math.round(amt*0.15);
         const laundered = amt - fee;
@@ -2539,29 +2573,29 @@ function renderBank(){
   </div>`);
   wrap.appendChild(loan);
   loan.querySelector("#borrow-btn").onclick = ()=>{
-    if(!S.job){ alert("You need a job before a bank will lend to you."); return; }
+    if(!S.job){ showToast("You need a job before a bank will lend to you."); return; }
     const amt = Number(loan.querySelector("#loan-amt").value)||0;
     if(amt<=0){ return; }
     const cap = Math.max(0, Math.min(S.job.salary*5, netWorth()*0.5));
-    if(S.loan+amt > cap){ alert(`Banks won't lend you beyond ${fmt(cap)} given your salary and net worth.`); return; }
+    if(S.loan+amt > cap){ showToast(`Banks won't lend you beyond ${fmt(cap)} given your salary and net worth.`); return; }
     S.loan+=amt; S.money+=amt; log(`You took out a loan of ${fmt(amt)}.`); renderAll();
   };
   loan.querySelector("#borrow-max-btn").onclick = ()=>{
-    if(!S.job){ alert("You need a job before a bank will lend to you."); return; }
+    if(!S.job){ showToast("You need a job before a bank will lend to you."); return; }
     const cap = Math.max(0, Math.min(S.job.salary*5, netWorth()*0.5));
     const room = cap - S.loan;
-    if(room<=0){ alert("You're already borrowed to the max."); return; }
+    if(room<=0){ showToast("You're already borrowed to the max."); return; }
     S.loan += room; S.money += room; log(`You took out a loan of ${fmt(room)}, borrowing the maximum available.`); renderAll();
   };
   loan.querySelector("#repay-btn").onclick = ()=>{
     const amt = Number(loan.querySelector("#loan-amt").value)||0;
-    if(amt<=0||amt>S.money){ alert("Invalid amount."); return; }
+    if(amt<=0||amt>S.money){ showToast("Invalid amount."); return; }
     const pay = Math.min(amt, S.loan); S.loan-=pay; S.money-=pay; renderAll();
   };
   loan.querySelector("#repay-all-btn").onclick = ()=>{
-    if(S.loan<=0){ alert("You have no outstanding loan."); return; }
+    if(S.loan<=0){ showToast("You have no outstanding loan."); return; }
     const pay = Math.min(S.money, S.loan);
-    if(pay<=0){ alert("Not enough cash to repay anything."); return; }
+    if(pay<=0){ showToast("Not enough cash to repay anything."); return; }
     S.loan-=pay; S.money-=pay; renderAll();
   };
   const bankCountryInfo = COUNTRY_INFO[S.country];
@@ -2612,18 +2646,18 @@ function renderStocks(){
       const act=b.dataset.act;
       if(act==="buycustom"){
         let qty = Math.floor(Number(c.querySelector(`[data-buyamt="${s.sym}"]`).value)) || 0;
-        if(qty<=0){ alert("Enter a valid number of shares."); return; }
+        if(qty<=0){ showToast("Enter a valid number of shares."); return; }
         if(qty>available){ qty=available; }
         if(qty>remainingThisYear){ qty=remainingThisYear; }
-        if(qty<=0){ alert(`No more ${s.sym} shares available to buy this year.`); return; }
+        if(qty<=0){ showToast(`No more ${s.sym} shares available to buy this year.`); return; }
         const cost = price*qty;
-        if(S.money<cost){ alert("Not enough cash."); return; }
+        if(S.money<cost){ showToast("Not enough cash."); return; }
         S.money-=cost; S.stockHold[s.sym]=(S.stockHold[s.sym]||0)+qty;
         S.stockBoughtThisYear[s.sym] = (S.stockBoughtThisYear[s.sym]||0)+qty;
       }
       if(act==="buymax"){
         let qty = Math.min(available, remainingThisYear, Math.floor(S.money/price));
-        if(qty<=0){ alert("Can't afford any more shares, or you're at this year's limit."); return; }
+        if(qty<=0){ showToast("Can't afford any more shares, or you're at this year's limit."); return; }
         const cost = price*qty;
         S.money-=cost; S.stockHold[s.sym]=(S.stockHold[s.sym]||0)+qty;
         S.stockBoughtThisYear[s.sym] = (S.stockBoughtThisYear[s.sym]||0)+qty;
@@ -2650,7 +2684,7 @@ function renderStocks(){
         <button class="small-btn gold" data-act="sell" ${held<=0?'disabled':''}>Sell All</button>
       </div></div>`);
     c.querySelectorAll("button").forEach(b=> b.onclick=()=>{
-      if(b.dataset.act==="buy"){ if(S.money>=500){ S.money-=500; S.cryptoHold[cr.sym]=(S.cryptoHold[cr.sym]||0)+500/price; } else alert("Not enough cash."); }
+      if(b.dataset.act==="buy"){ if(S.money>=500){ S.money-=500; S.cryptoHold[cr.sym]=(S.cryptoHold[cr.sym]||0)+500/price; } else showToast("Not enough cash."); }
       if(b.dataset.act==="sell"){ S.money+=held*price; S.cryptoHold[cr.sym]=0; }
       renderAll();
     });
@@ -2675,18 +2709,18 @@ function renderStocks(){
       </div>`);
     c.querySelector("#dump-btn").onclick=()=>{ S.money += oc.founderHold*oc.price; oc.founderHold=0; log(`You cashed out your ${oc.name} holdings.`); renderAll(); };
     c.querySelector("#mine-btn").onclick=()=>{
-      if(S.money<20){ alert("Not enough cash for electricity."); return; }
+      if(S.money<20){ showToast("Not enough cash for electricity."); return; }
       S.money-=20; const yieldAmt = (oc.miningRig?2:1)*rand(30,150);
       oc.founderHold += yieldAmt;
       log(`You mined ${yieldAmt} ${oc.sym}.`); renderAll();
     };
     const rigBtn = c.querySelector("#rig-btn");
     if(rigBtn) rigBtn.onclick=()=>{
-      if(S.money<8000){ alert("Not enough cash."); return; }
+      if(S.money<8000){ showToast("Not enough cash."); return; }
       S.money-=8000; oc.miningRig=true; log(`You bought a mining rig for ${oc.name}.`); renderAll();
     };
     c.querySelector("#market-btn").onclick=()=>{
-      if(S.money<campaignCost){ alert("Not enough cash."); return; }
+      if(S.money<campaignCost){ showToast("Not enough cash."); return; }
       S.money-=campaignCost; oc.marketing=(oc.marketing||0)+1;
       const busted = chance(0.06 + (oc.marketing||0)*0.01);
       if(busted){
@@ -2707,7 +2741,7 @@ function renderStocks(){
     };
     const listBtn = c.querySelector("#list-btn");
     if(listBtn) listBtn.onclick=()=>{
-      if(S.money<50000){ alert("Not enough cash."); return; }
+      if(S.money<50000){ showToast("Not enough cash."); return; }
       S.money-=50000; oc.listed=true; oc.price=Math.round(oc.price*1.5*100)/100; S.fameBonus=clamp((S.fameBonus||0)+15,-70,70);
       log(`${oc.name} got listed on a major exchange!`); renderAll();
     };
@@ -2723,7 +2757,7 @@ function renderStocks(){
     c.querySelector("#launch-btn").onclick = ()=>{
       const nm = c.querySelector("#coin-name").value.trim() || "MyCoin";
       const sym = (c.querySelector("#coin-sym").value.trim() || "MYC").toUpperCase();
-      if(S.money<6000){ alert("Not enough cash."); return; }
+      if(S.money<6000){ showToast("Not enough cash."); return; }
       S.money-=6000; S.ownCoin = {name:nm, sym, price:1, hype:20, founderHold:1000000, marketing:0, listed:false, miningRig:false};
       log(`You launched your own cryptocurrency, ${nm} (${sym}).`); renderAll();
     };
@@ -2748,7 +2782,7 @@ function renderBiz(){
     </div>`);
     const buyBtn = c.querySelector(`[data-id]`);
     if(buyBtn) buyBtn.onclick=()=>{
-      if(S.money<b.cost){ alert("Not enough cash."); return; }
+      if(S.money<b.cost){ showToast("Not enough cash."); return; }
       S.money-=b.cost; S.businesses.push({...b}); log(`You bought a ${b.name}.`); renderAll();
     };
     const sellBtn = c.querySelector(`[data-sell]`);
@@ -2772,7 +2806,7 @@ function renderBiz(){
           <div class="card-sub">Start cost ${fmt(emp.startCost)}${emp.needsDriver?" · requires a Driver's License":''}</div>
           <button class="small-btn gold" id="start-${emp.id}" style="margin-top:8px;" ${needOk?'':'disabled'}>Start</button></div>`);
         c.querySelector(`#start-${emp.id}`).onclick = ()=>{
-          if(S.money<emp.startCost){ alert("Not enough cash."); return; }
+          if(S.money<emp.startCost){ showToast("Not enough cash."); return; }
           S.money -= emp.startCost; S.ventures[emp.id] = {level:1, income:emp.baseIncome, value:emp.startCost, customName:null};
           log(`You started a ${emp.name}.`); renderAll();
         };
@@ -2795,7 +2829,7 @@ function renderBiz(){
         c.querySelector(`#grow-${emp.id}`).onclick = ()=>{
           if(!canExpand) return;
           const cost = emp.growthCost*owned.level;
-          if(S.money<cost){ alert("Not enough cash."); return; }
+          if(S.money<cost){ showToast("Not enough cash."); return; }
           S.money-=cost; owned.level++; owned.income=Math.round(owned.income*1.4); owned.value+=cost;
           S.empireExpandYear[emp.id] = S.age;
           log(`You expanded your ${displayName} to level ${owned.level}.`); renderAll();
@@ -2807,7 +2841,7 @@ function renderBiz(){
         const renameBtn = c.querySelector(`#rename-btn-${emp.id}`);
         if(renameBtn) renameBtn.onclick = ()=>{
           const newName = c.querySelector(`#rename-${emp.id}`).value.trim();
-          if(!newName){ alert("Enter a new name first."); return; }
+          if(!newName){ showToast("Enter a new name first."); return; }
           owned.customName = newName;
           log(`You renamed your car company to ${newName}.`); renderAll();
         };
@@ -2826,7 +2860,7 @@ function renderBiz(){
     </div>`);
     if(need) c.querySelector("#found-btn").onclick=()=>{
       const nm = c.querySelector("#co-name").value.trim()||"Untitled Ventures";
-      if(S.money<12000){ alert("Not enough cash."); return; }
+      if(S.money<12000){ showToast("Not enough cash."); return; }
       S.money-=12000; S.company={name:nm, value:12000, employees:1, public:false};
       log(`You founded ${nm}.`); renderAll();
     };
@@ -2853,16 +2887,16 @@ function renderBiz(){
       <div class="card-sub" style="margin-top:6px;">A bold bet either multiplies your valuation or sinks the company entirely.</div>
     </div>`);
     c.querySelector("#invest-btn").onclick=()=>{
-      if(S.money<20000){ alert("Not enough cash."); return; }
+      if(S.money<20000){ showToast("Not enough cash."); return; }
       S.money-=20000; co.value += Math.round(20000*rand(6,16)/10); log(`You invested in ${co.name}.`); renderAll();
     };
     c.querySelector("#hire-btn").onclick=()=>{
-      if(S.money<5000){ alert("Not enough cash."); return; }
+      if(S.money<5000){ showToast("Not enough cash."); return; }
       S.money-=5000; co.employees++; co.value+=2500; log(`${co.name} hired a new employee.`); renderAll();
     };
     const officeBtn = c.querySelector("#office-btn");
     if(officeBtn) officeBtn.onclick=()=>{
-      if(S.money<50000){ alert("Not enough cash."); return; }
+      if(S.money<50000){ showToast("Not enough cash."); return; }
       S.money-=50000; co.officeSpace=true; log(`${co.name} moved into a real office.`); renderAll();
     };
     const ipoBtn = c.querySelector("#ipo-btn");
@@ -2899,7 +2933,7 @@ function renderBiz(){
       <input id="prod-name" placeholder="Product name" style="width:100%; margin-top:8px; background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:9px; border-radius:3px;">
       <button class="small-btn gold" id="launch-prod-btn" style="margin-top:8px;">Develop Product (${fmt(15000)})</button></div>`);
     prodCard.querySelector("#launch-prod-btn").onclick=()=>{
-      if(S.money<15000){ alert("Not enough cash."); return; }
+      if(S.money<15000){ showToast("Not enough cash."); return; }
       S.money-=15000;
       const nm = prodCard.querySelector("#prod-name").value.trim() || "New Product";
       const successRate = clamp(0.4 + S.stats.smarts/400, 0.2, 0.85);
@@ -2918,7 +2952,7 @@ function renderBiz(){
         <button class="small-btn red" data-discontinue="${idx}" style="margin-top:8px;">Discontinue</button></div>`);
       pc.querySelector("[data-market]").onclick=()=>{
         if(prod.marketedCount>=2) return;
-        if(S.money<8000){ alert("Not enough cash."); return; }
+        if(S.money<8000){ showToast("Not enough cash."); return; }
         S.money-=8000; prod.marketedCount++;
         if(chance(0.6)){ prod.sales = Math.round(prod.sales*1.4); co.value += rand(5000,20000); log(`Marketing boosted sales of ${prod.name}.`); }
         else { log(`The marketing push for ${prod.name} didn't move the needle much.`); }
@@ -3039,7 +3073,7 @@ function renderJobCard(){
       const testBtn = testCard.querySelector("#test-btn");
       if(testBtn) testBtn.onclick=()=>{
         if(testTaken) return;
-        if(S.money<nextRank.testCost){ alert("Not enough cash for the exam fee."); return; }
+        if(S.money<nextRank.testCost){ showToast("Not enough cash for the exam fee."); return; }
         S.money -= nextRank.testCost; S.job.testTakenThisYear = true;
         if(chance(testChance)){
           S.job.title=nextRank.t; S.job.salary=nextRank.s;
@@ -3103,7 +3137,7 @@ function renderJobCard(){
     const sharesBtn = c.querySelector("#shares-btn");
     if(sharesBtn) sharesBtn.onclick=()=>{
       if(!canBuyShares) return;
-      if(S.money<buyCost){ alert("Not enough cash."); return; }
+      if(S.money<buyCost){ showToast("Not enough cash."); return; }
       S.money-=buyCost; S.job.ownershipPct=Math.min(100,pct+1);
       log(`You bought more shares in the company — now ${S.job.ownershipPct}% owned.`); renderAll();
     };
@@ -3262,7 +3296,7 @@ function renderCareer(){
     const c = el(`<div class="card"><div class="card-title">Enroll in University</div><div class="card-sub">4 years, ${fmt(uniCost)}/age tuition${scholarship?' — scholarship applied for your GPA!':''}. Unlocks higher-paying careers.</div>
       <button class="small-btn gold" id="uni-btn" style="margin-top:8px;">Enroll</button></div>`);
     c.querySelector("#uni-btn").onclick=()=>{
-      if(S.money<uniCost){ alert("Not enough cash for tuition."); return; }
+      if(S.money<uniCost){ showToast("Not enough cash for tuition."); return; }
       S.money-=uniCost; S.inSchool=true; S.eduTier="university-progress"; S._uniYears=0; S._uniTuition=uniCost;
       log(`You enrolled in university.`); renderAll();
     };
@@ -3273,7 +3307,7 @@ function renderCareer(){
     const cc = el(`<div class="card"><div class="card-title">Enroll in College</div><div class="card-sub">2 years, ${fmt(collegeCost)}/age tuition${collegeScholarship?' — scholarship applied for your GPA!':''}. A faster, cheaper path into skilled careers.</div>
       <button class="small-btn gold" id="college-btn" style="margin-top:8px;">Enroll</button></div>`);
     cc.querySelector("#college-btn").onclick=()=>{
-      if(S.money<collegeCost){ alert("Not enough cash for tuition."); return; }
+      if(S.money<collegeCost){ showToast("Not enough cash for tuition."); return; }
       S.money-=collegeCost; S.inSchool=true; S.eduTier="college-progress"; S._collegeYears=0; S._collegeTuition=collegeCost;
       log(`You enrolled in college.`); renderAll();
     };
@@ -3283,7 +3317,7 @@ function renderCareer(){
       const med = el(`<div class="card" style="border-color:var(--gold);"><div class="card-title">Medical School (Direct Entry)</div><div class="card-sub">Your A+ grades earned you direct entry. 6 years, ${fmt(20000)}/age tuition — leads straight to a career as a Doctor.</div>
         <button class="small-btn gold" id="med-btn" style="margin-top:8px;">Enroll</button></div>`);
       med.querySelector("#med-btn").onclick=()=>{
-        if(S.money<20000){ alert("Not enough cash for tuition."); return; }
+        if(S.money<20000){ showToast("Not enough cash for tuition."); return; }
         S.money-=20000; S.inSchool=true; S.eduTier="medical-progress"; S._medYears=0;
         log(`You enrolled in medical school.`); renderAll();
       };
@@ -3292,7 +3326,7 @@ function renderCareer(){
       const prep = el(`<div class="card"><div class="card-title">Medical School Prep Course</div><div class="card-sub">Your GPA (${S._highSchoolGPA||0}/100) isn't high enough for medical school — you need 95+. A prep course might help.</div>
         <button class="small-btn" id="prep-btn" style="margin-top:8px;">Take Prep Course (${fmt(5000)})</button></div>`);
       prep.querySelector("#prep-btn").onclick=()=>{
-        if(S.money<5000){ alert("Not enough cash."); return; }
+        if(S.money<5000){ showToast("Not enough cash."); return; }
         S.money-=5000; S._highSchoolGPA=clamp((S._highSchoolGPA||0)+rand(2,6),0,100);
         log(`You took a prep course. Your GPA is now ${S._highSchoolGPA}.`); renderAll();
       };
@@ -3303,7 +3337,7 @@ function renderCareer(){
     const c = el(`<div class="card"><div class="card-title">Pursue Graduate School</div><div class="card-sub">3 years, ${fmt(15000)}/age tuition. Opens elite careers.</div>
       <button class="small-btn gold" id="grad-btn" style="margin-top:8px;">Enroll</button></div>`);
     c.querySelector("#grad-btn").onclick=()=>{
-      if(S.money<15000){ alert("Not enough cash for tuition."); return; }
+      if(S.money<15000){ showToast("Not enough cash for tuition."); return; }
       S.money-=15000; S.inSchool=true; S.eduTier="graduate-progress"; S._gradYears=0;
       log(`You began graduate school.`); renderAll();
     };
@@ -3398,7 +3432,7 @@ function renderCareer(){
     const lessonsCard = el(`<div class="card"><div class="card-title">Acting Lessons</div><div class="card-sub">Acting skill: ${S.actingSkill||0}/100</div>
       <button class="small-btn gold" id="acting-lesson-btn" style="margin-top:8px;" ${(S.actingSkill||0)>=100?'disabled':''}>Take a Lesson (${fmt(2000)})</button></div>`);
     lessonsCard.querySelector("#acting-lesson-btn").onclick=()=>{
-      if(S.money<2000){ alert("Not enough cash."); return; }
+      if(S.money<2000){ showToast("Not enough cash."); return; }
       S.money-=2000; S.actingSkill=clamp((S.actingSkill||0)+rand(3,8),0,100);
       log("You took acting lessons to sharpen your craft."); renderAll();
     };
@@ -3436,7 +3470,7 @@ function renderCareer(){
         const agentCard = el(`<div class="card"><div class="card-title">Get an Agent</div><div class="card-sub">An agent finds you movie roles instead of you auditioning blind.</div>
           <button class="small-btn gold" id="hire-agent-btn" style="margin-top:8px;">Hire an Agent (${fmt(5000)})</button></div>`);
         agentCard.querySelector("#hire-agent-btn").onclick=()=>{
-          if(S.money<5000){ alert("Not enough cash."); return; }
+          if(S.money<5000){ showToast("Not enough cash."); return; }
           S.money-=5000; S.hasAgent=true; log("You signed with a talent agent."); renderAll();
         };
         wrap.appendChild(agentCard);
@@ -3453,7 +3487,7 @@ function renderCareer(){
       const studioCard = el(`<div class="card"><div class="card-title">Found a Movie Studio</div><div class="card-sub">Produce your own films and sign actors to your roster.</div>
         <button class="small-btn gold" id="found-studio-btn" style="margin-top:8px;">Found Studio (${fmt(200000)})</button></div>`);
       studioCard.querySelector("#found-studio-btn").onclick=()=>{
-        if(S.money<200000){ alert("Not enough cash."); return; }
+        if(S.money<200000){ showToast("Not enough cash."); return; }
         S.money-=200000; S.movieStudio={value:200000, roster:[], moviesMade:0, movies:[]};
         log("You founded your own movie studio."); renderAll();
       };
@@ -3499,7 +3533,7 @@ function renderCareer(){
         const baseCosts = {1:[35000,70000], 2:[1500000,2600000], 3:[15000000,26000000], 4:[40000000,65000000]};
         let cost = rand(baseCosts[tier][0], baseCosts[tier][1]);
         if(ms.castMode==="star") cost += starCost;
-        if(S.money<cost){ alert("Not enough cash."); return; }
+        if(S.money<cost){ showToast("Not enough cash."); return; }
         S.money -= cost; ms.moviesThisYearCount = (ms.moviesThisYearCount||0)+1;
         let castBonus = avgFame/3;
         if(ms.castMode==="self") castBonus = (S.actingSkill||0)/3 + S.stats.looks/8;
@@ -3535,7 +3569,7 @@ function renderCareer(){
         renderAll();
       });
       studioCard.querySelector("#sign-actor-btn").onclick=()=>{
-        if(S.money<signCost){ alert("Not enough cash."); return; }
+        if(S.money<signCost){ showToast("Not enough cash."); return; }
         S.money-=signCost;
         ms.roster.push({name:candidate.name, fame:candidate.fame});
         log(`You signed ${candidate.name} to your studio.`); ms.candidateActorAge=null;
@@ -3582,14 +3616,14 @@ function renderCareer(){
           <button class="small-btn gold" data-test="${li.id}" ${readyForTest?'':'disabled'}>Take the Test</button>
         </div></div>`);
       c.querySelector(`[data-lesson]`).onclick = ()=>{
-        if(S.money<li.lessonCost){ alert("Not enough cash."); return; }
+        if(S.money<li.lessonCost){ showToast("Not enough cash."); return; }
         S.money -= li.lessonCost; S.licenseLessons = S.licenseLessons||{};
         S.licenseLessons[li.id] = (S.licenseLessons[li.id]||0)+1;
         log(`You completed a lesson toward your ${li.name}.`); renderAll();
       };
       c.querySelector(`[data-test]`).onclick = ()=>{
-        if(S.money<li.cost){ alert("Not enough cash."); return; }
-        if(S.stats.smarts<li.minSmarts){ alert("Not smart enough yet — study up first."); return; }
+        if(S.money<li.cost){ showToast("Not enough cash."); return; }
+        if(S.stats.smarts<li.minSmarts){ showToast("Not smart enough yet — study up first."); return; }
         S.money -= li.cost;
         if(chance(0.85)){ S.licenses[li.id]=true; log(`You passed the test and earned your ${li.name}.`); }
         else { log(`You failed the test for your ${li.name}. Money's gone, though.`); }
@@ -3605,7 +3639,7 @@ function renderCareer(){
         ${!meets?"<div class=\"card-sub\" style=\"margin-top:6px;\">You don't meet the criteria yet.</div>":''}
         </div>`);
       c.querySelector(`[data-apply]`).onclick = ()=>{
-        if(S.money<li.cost){ alert("Not enough cash."); return; }
+        if(S.money<li.cost){ showToast("Not enough cash."); return; }
         S.money -= li.cost; S.licenses[li.id]=true;
         log(`Your application for a ${li.name} was approved.`); renderAll();
       };
@@ -3617,8 +3651,8 @@ function renderCareer(){
       <button class="small-btn gold" data-id="${li.id}">Get</button>
       </div></div>`);
     c.querySelector("button").onclick=()=>{
-      if(S.money<li.cost){ alert("Not enough cash."); return; }
-      if(S.stats.smarts<li.minSmarts){ alert("Not smart enough yet — study up first."); return; }
+      if(S.money<li.cost){ showToast("Not enough cash."); return; }
+      if(S.stats.smarts<li.minSmarts){ showToast("Not smart enough yet — study up first."); return; }
       S.money-=li.cost;
       if(chance(0.85)){ S.licenses[li.id]=true; log(`You earned your ${li.name}.`); }
       else { log(`You failed the test for your ${li.name}. Money's gone, though.`); }
@@ -3757,7 +3791,7 @@ function renderCrime(){
     const smokesBtn = prisonExtras.querySelector("#smokes-btn");
     if(smokesBtn) smokesBtn.onclick=()=>{
       if(cap('smokes',5)) return;
-      if(S.money<50){ alert("Not enough cash."); return; }
+      if(S.money<50){ showToast("Not enough cash."); return; }
       ja.smokes=(ja.smokes||0)+1;
       S.money-=50; adjStat("happiness",4);
       log("You bought a pack of smokes off another inmate. Prison currency well spent.");
@@ -3820,8 +3854,8 @@ function renderCrime(){
     if(!isLifeSentence){
     legalCard.querySelector("#bail-btn").onclick=()=>{
       if(bailCapped) return;
-      if(S.jailYears>3 && !S.godMode){ alert("Bail isn't available for a sentence this long."); return; }
-      if(S.money<bailAmt){ alert("Not enough cash."); return; }
+      if(S.jailYears>3 && !S.godMode){ showToast("Bail isn't available for a sentence this long."); return; }
+      if(S.money<bailAmt){ showToast("Not enough cash."); return; }
       ja.bail=(ja.bail||0)+1;
       S.money -= bailAmt; S.jailYears = 0;
       log(`You posted bail for ${fmt(bailAmt)} and walked free.`); renderAll();
@@ -3840,7 +3874,7 @@ function renderCrime(){
     };
     legalCard.querySelector("#lawyer-btn").onclick=()=>{
       if(lawyerCapped) return;
-      if(S.money<8000){ alert("Not enough cash."); return; }
+      if(S.money<8000){ showToast("Not enough cash."); return; }
       ja.lawyer=(ja.lawyer||0)+1;
       S.money -= 8000;
       if(S.godMode || chance(0.3 + S.stats.smarts/500)){
@@ -3861,7 +3895,7 @@ function renderCrime(){
       </div>`);
     guardCard.querySelector("#bribe-guard-btn").onclick=()=>{
       if(bribeCapped) return;
-      if(S.money<3000){ alert("Not enough cash."); return; }
+      if(S.money<3000){ showToast("Not enough cash."); return; }
       ja.bribeguard=(ja.bribeguard||0)+1;
       S.money -= 3000;
       if(S.godMode || chance(0.6)){
@@ -3886,7 +3920,7 @@ function renderCrime(){
       const burnerBtn = burnerCard.querySelector("#burner-btn");
       if(burnerBtn) burnerBtn.onclick=()=>{
         if(burnerGetCapped) return;
-        if(S.money<1500){ alert("Not enough cash."); return; }
+        if(S.money<1500){ showToast("Not enough cash."); return; }
         ja.burnerget=(ja.burnerget||0)+1;
         S.money-=1500; S.hasBurnerPhone=true;
         log("The guard smuggled in a burner phone. Use it carefully — calls only go to people you trust.");
@@ -3894,7 +3928,7 @@ function renderCrime(){
       };
       burnerCard.querySelector("#guardsmokes-btn").onclick=()=>{
         if(guardSmokesCapped) return;
-        if(S.money<30){ alert("Not enough cash."); return; }
+        if(S.money<30){ showToast("Not enough cash."); return; }
         ja.guardsmokes=(ja.guardsmokes||0)+1;
         S.money-=30; adjStat("happiness",4);
         log("The guard slipped you a pack of smokes."); renderAll();
@@ -4040,7 +4074,7 @@ function renderCrime(){
           const chosen = getChosen();
           if(!chosen || chosen.kind!=="crew" || !chosen.jailed) return;
           const bailCost = rand(5000,20000);
-          if(S.money<bailCost){ alert("Not enough cash."); return; }
+          if(S.money<bailCost){ showToast("Not enough cash."); return; }
           S.money -= bailCost; chosen.member.jailed=false; chosen.member.loyalty=clamp(chosen.member.loyalty+10,0,100);
           useUpCall();
           log(`You arranged for ${chosen.member.name}'s bail — ${fmt(bailCost)} well spent.`);
@@ -4127,7 +4161,7 @@ function renderCrime(){
       };
       c.querySelector("#hitman-btn").onclick=()=>{
         if(murderCapped) return;
-        if(S.money<hitmanCost){ alert("Not enough cash to hire a hitman."); return; }
+        if(S.money<hitmanCost){ showToast("Not enough cash to hire a hitman."); return; }
         S.crimeAttempts = S.crimeAttempts||{}; S.crimeAttempts.murder=(S.crimeAttempts.murder||0)+1;
         const targetKey = c.querySelector("#murder-target-select").value;
         S.money -= hitmanCost;
@@ -4163,7 +4197,7 @@ function renderCrime(){
         </div>`);
       const buyToolBtn = reqCard.querySelector("[data-buytool]");
       if(buyToolBtn) buyToolBtn.onclick=()=>{
-        if(S.money<req.buyCost){ alert("Not enough cash."); return; }
+        if(S.money<req.buyCost){ showToast("Not enough cash."); return; }
         S.money -= req.buyCost; S[req.buyKey] = true;
         log(`You picked up ${req.label.toLowerCase()}.`); renderAll();
       };
@@ -4290,7 +4324,7 @@ function renderCrime(){
       const bc = el(`<div class="card"><div class="card-row"><div><div class="card-title">${pi.name}</div><div class="card-sub">Buy back for ${fmt(pi.buyback)}</div></div>
         <button class="small-btn gold" data-buyback="${idx}">Buy Back</button></div></div>`);
       bc.querySelector("button").onclick=()=>{
-        if(S.money<pi.buyback){ alert("Not enough cash."); return; }
+        if(S.money<pi.buyback){ showToast("Not enough cash."); return; }
         S.money -= pi.buyback; S.cars.push(pi.car); S.pawnedItems.splice(idx,1);
         log(`You bought back your ${pi.name}.`); renderAll();
       };
@@ -4338,7 +4372,7 @@ function renderCrime(){
       <button class="small-btn red" id="setup-lab-btn" style="margin-top:8px;" ${S.stats.smarts<50?'disabled':''}>Set Up Lab (${fmt(50000)})</button></div>`);
     if(S.stats.smarts<50) labCard.appendChild(el(`<div class="card-sub" style="margin-top:6px;">You need 50+ smarts to pull this off.</div>`));
     labCard.querySelector("#setup-lab-btn").onclick=()=>{
-      if(S.money<50000){ alert("Not enough cash."); return; }
+      if(S.money<50000){ showToast("Not enough cash."); return; }
       S.money-=50000; S.drugLab={level:1, batches:[], heat:0, cooksThisYear:0, sellsThisYear:0};
       S.karma=clamp(S.karma-15,-100,100);
       log("You set up a hidden lab and started cooking product."); renderAll();
@@ -4360,7 +4394,7 @@ function renderCrime(){
     labCard.querySelector("#cook-btn").onclick=()=>{
       if(cookCapped) return;
       const cost = 5000*lab.level;
-      if(S.money<cost){ alert("Not enough cash."); return; }
+      if(S.money<cost){ showToast("Not enough cash."); return; }
       S.money-=cost; lab.cooksThisYear=(lab.cooksThisYear||0)+1;
       const bustRisk = clamp(0.1 + (lab.heat||0)/300, 0.05, 0.6);
       if(!S.godMode && chance(bustRisk*0.4)){
@@ -4398,12 +4432,12 @@ function renderCrime(){
     };
     labCard.querySelector("#expand-lab-btn").onclick=()=>{
       const cost = 40000*lab.level;
-      if(S.money<cost){ alert("Not enough cash."); return; }
+      if(S.money<cost){ showToast("Not enough cash."); return; }
       S.money-=cost; lab.level++;
       log(`You expanded your operation to level ${lab.level}.`); renderAll();
     };
     labCard.querySelector("#bribe-heat-btn").onclick=()=>{
-      if(S.money<8000){ alert("Not enough cash."); return; }
+      if(S.money<8000){ showToast("Not enough cash."); return; }
       S.money-=8000; lab.heat=clamp((lab.heat||0)-rand(20,35),0,100);
       log("You greased the right palms to take some heat off your operation."); renderAll();
     };
@@ -4416,7 +4450,7 @@ function renderCrime(){
       <div class="card-sub">Your criminal record locks you out of law enforcement and public office. A lawyer might be able to get it cleared.</div>
       <button class="small-btn gold" id="expunge-btn" style="margin-top:8px;">Hire a Lawyer (${fmt(25000)})</button></div>`);
     expungeCard.querySelector("#expunge-btn").onclick=()=>{
-      if(S.money<25000){ alert("Not enough cash."); return; }
+      if(S.money<25000){ showToast("Not enough cash."); return; }
       S.money-=25000;
       const chance_ = clamp(0.3 + S.stats.smarts/400 + (S.karma>0?S.karma/300:0), 0.1, 0.75);
       if(chance(chance_)){
@@ -4436,7 +4470,7 @@ function renderCrime(){
     <div class="card-sub">Pay to disappear and come back as someone new — wipes your criminal record, but you lose your public reputation and following.${S.hasFakeIdKit?' Your fake ID kit cuts the cost.':''}</div>
     <button class="small-btn gold" id="newid-btn" style="margin-top:8px;">Change Identity (${fmt(idChangeCost)})</button></div>`);
   idCard.querySelector("#newid-btn").onclick=()=>{
-    if(S.money<idChangeCost){ alert("Not enough cash."); return; }
+    if(S.money<idChangeCost){ showToast("Not enough cash."); return; }
     S.money -= idChangeCost; S.hasFakeIdKit=false;
     const gender = S.appearance.gender==="Female"?"female":"male";
     const newName = `${randomFirst(gender)} ${randomFirst(chance(0.5)?"male":"female")}`;
@@ -4474,7 +4508,7 @@ function renderCrime(){
     const foundCard = el(`<div class="card"><div class="card-title">Found Your Own Gang</div><div class="card-sub">Start from nothing and build your own family from the ground up. Slower, riskier — but it's yours, and no one can take the top spot from you but you.</div>
       <button class="small-btn gold" id="found-gang-btn" style="margin-top:8px;">Start Your Own (${fmt(15000)})</button></div>`);
     foundCard.querySelector("#found-gang-btn").onclick=()=>{
-      if(S.money<15000){ alert("Not enough cash."); return; }
+      if(S.money<15000){ showToast("Not enough cash."); return; }
       S.money-=15000;
       S.gang = {rank:0, heat:0, recruited:[], selfFounded:true};
       log(`You put up ${fmt(15000)} and started your own outfit from scratch.`);
@@ -4625,14 +4659,14 @@ function renderCrime(){
       </div></div>`);
     const claimBtn = opsCard.querySelector("#claim-territory-btn");
     if(claimBtn) claimBtn.onclick=()=>{
-      if(curTerritory>=maxTerritory){ alert("Recruit more crew to expand into more territory."); return; }
-      if(S.money<nextTerritoryCost){ alert("Not enough cash."); return; }
+      if(curTerritory>=maxTerritory){ showToast("Recruit more crew to expand into more territory."); return; }
+      if(S.money<nextTerritoryCost){ showToast("Not enough cash."); return; }
       S.money-=nextTerritoryCost; g.territoryCount=(g.territoryCount||0)+1; g.territory=true;
       log("You took over another slice of turf — steady money, but rivals will notice."); renderAll();
     };
     opsCard.querySelector("#smuggle-btn").onclick=()=>{
       if((g.smugglesThisYear||0)>=1) return;
-      if(S.money<15000){ alert("Not enough cash to front this operation."); return; }
+      if(S.money<15000){ showToast("Not enough cash to front this operation."); return; }
       S.money -= 15000;
       g.smugglesThisYear=(g.smugglesThisYear||0)+1;
       const riskAdj = S.godMode ? 0 : clamp(0.3 + g.heat/200 - S.stats.smarts/500 - (g.copsOnPayroll||0)*0.04, 0.05, 0.85);
@@ -4648,7 +4682,7 @@ function renderCrime(){
       renderAll();
     };
     opsCard.querySelector("#launder-btn").onclick=()=>{
-      if(S.money<6000){ alert("Not enough cash."); return; }
+      if(S.money<6000){ showToast("Not enough cash."); return; }
       S.money-=6000; g.heat=clamp(g.heat-rand(15,25),0,100);
       log("You ran money through a front business to clean it up and cool things off."); renderAll();
     };
@@ -4660,7 +4694,7 @@ function renderCrime(){
       <button class="small-btn gold" id="addcop-btn" style="margin-top:8px;" ${cops>=5?'disabled':''}>Put a Cop on the Payroll [${cops}/5]</button></div>`);
     copsCard.querySelector("#addcop-btn").onclick=()=>{
       if(cops>=5) return;
-      if(S.money<4000){ alert("Not enough cash."); return; }
+      if(S.money<4000){ showToast("Not enough cash."); return; }
       S.money-=4000; g.copsOnPayroll=(g.copsOnPayroll||0)+1;
       log("You've got another officer quietly looking the other way, for a price.");
       renderAll();
@@ -4708,8 +4742,8 @@ function renderCrime(){
       const recruitCrewCard = el(`<div class="card"><div class="card-title">Recruit a Crew Member</div><div class="card-sub">Bring someone in to work jobs for you. Crew size: ${g.crew.length}/${crewCap}</div>
         <button class="small-btn red" id="recruit-crew-btn" style="margin-top:8px;" ${g.crew.length>=crewCap?'disabled':''}>Recruit (${fmt(10000)})</button></div>`);
       recruitCrewCard.querySelector("#recruit-crew-btn").onclick=()=>{
-        if(g.crew.length>=crewCap){ alert("Your crew is at full capacity."); return; }
-        if(S.money<10000){ alert("Not enough cash."); return; }
+        if(g.crew.length>=crewCap){ showToast("Your crew is at full capacity."); return; }
+        if(S.money<10000){ showToast("Not enough cash."); return; }
         S.money-=10000;
         const memberName = randomFirst();
         g.crew.push({name:memberName, loyalty:rand(30,55), rank:"Associate", jobsThisYear:0, jailed:false, cutPercent:0});
@@ -4733,7 +4767,7 @@ function renderCrime(){
             <div class="card-sub">Loyalty: ${member.loyalty}/100</div>
             <button class="small-btn gold" data-bail="${idx}" style="margin-top:8px;">Bail Out (${fmt(bailCost)})</button></div>`);
           mc.querySelector("[data-bail]").onclick=()=>{
-            if(S.money<bailCost){ alert("Not enough cash."); return; }
+            if(S.money<bailCost){ showToast("Not enough cash."); return; }
             S.money-=bailCost; member.jailed=false; member.loyalty=clamp(member.loyalty+10,0,100);
             log(`You bailed ${member.name} out. They owe you now.`); renderAll();
           };
@@ -4779,7 +4813,7 @@ function renderCrime(){
           renderAll();
         };
         mc.querySelector("[data-bond]").onclick=()=>{
-          if(S.money<1000){ alert("Not enough cash."); return; }
+          if(S.money<1000){ showToast("Not enough cash."); return; }
           S.money-=1000; member.loyalty=clamp(member.loyalty+rand(8,15),0,100);
           log(`You spent time with ${member.name} — their loyalty is growing.`); renderAll();
         };
@@ -4872,7 +4906,7 @@ function renderAssets(mode){
     };
     const buyGasBtn = wrap.querySelector("#buygas-btn");
     if(buyGasBtn) buyGasBtn.onclick=()=>{
-      if(S.money<40){ alert("Not enough cash."); return; }
+      if(S.money<40){ showToast("Not enough cash."); return; }
       S.money-=40;
       const v = S.cars.slice().sort((a,b)=>a.gas-b.gas)[0];
       v.gas = 100;
@@ -4904,7 +4938,7 @@ function renderAssets(mode){
       ${owned? `<button class="small-btn" data-sellbike="${car.id}">Sell (${fmt(Math.round(car.value*0.6))})</button>` : `<button class="small-btn gold" data-buybike="${car.id}" ${needsLic && !S.licenses.motorcycle?'disabled':''}>Buy</button>`}
       </div></div>`);
     const bb = bkc.querySelector("[data-buybike]"), sb = bkc.querySelector("[data-sellbike]");
-    if(bb) bb.onclick=()=>{ if(ageLocked) return; if(S.money<car.cost){alert("Not enough cash.");return;} S.money-=car.cost; S.cars.push({...car}); log(`You bought a ${car.name}.`); renderAll(); };
+    if(bb) bb.onclick=()=>{ if(ageLocked) return; if(S.money<car.cost){showToast("Not enough cash.");return;} S.money-=car.cost; S.cars.push({...car}); log(`You bought a ${car.name}.`); renderAll(); };
     if(sb) sb.onclick=()=>{ S.money+=Math.round(car.value*0.6); S.cars=S.cars.filter(x=>x.id!==car.id); log(`You sold your ${car.name}.`); renderAll(); };
     wrap.appendChild(bkc);
   });
@@ -4926,10 +4960,10 @@ function renderAssets(mode){
         ${showBuying && !owned && (!needsLicense||S.licenses.driver) ? `<button class="small-btn" data-finance="${car.id}" style="margin-top:8px;" ${canFin?'':'disabled'}>Finance with a Loan</button>` : ''}
         </div>`);
       const b = c.querySelector("[data-buy]"), se = c.querySelector("[data-sell]"), fin = c.querySelector("[data-finance]");
-      if(b) b.onclick=()=>{ if(S.money<car.cost){alert("Not enough cash.");return;} S.money-=car.cost; S.cars.push({...car}); log(`You bought a ${car.name}.`); renderAll(); };
+      if(b) b.onclick=()=>{ if(S.money<car.cost){showToast("Not enough cash.");return;} S.money-=car.cost; S.cars.push({...car}); log(`You bought a ${car.name}.`); renderAll(); };
       if(se) se.onclick=()=>{ S.money+=Math.round(car.value*0.6); S.cars=S.cars.filter(x=>x.id!==car.id); log(`You sold your ${car.name}.`); renderAll(); };
       if(fin) fin.onclick=()=>{
-        if(!canFinance(car.cost)){ alert("The bank won't finance this given your salary and existing debt."); return; }
+        if(!canFinance(car.cost)){ showToast("The bank won't finance this given your salary and existing debt."); return; }
         takeFinancing(car.cost, car.name); S.cars.push({...car}); renderAll();
       };
       wrap.appendChild(c);
@@ -4957,7 +4991,7 @@ function renderAssets(mode){
         ${owned? `<button class="small-btn" data-sellboat="${boat.id}">Sell (${fmt(Math.round(boat.value*0.6))})</button>` : `<button class="small-btn gold" data-buyboat="${boat.id}" ${S.licenses.boat?'':'disabled'}>Buy</button>`}
         </div></div>`);
       const bb = bc.querySelector("[data-buyboat]"), sb = bc.querySelector("[data-sellboat]");
-      if(bb) bb.onclick=()=>{ if(S.money<boat.cost){alert("Not enough cash.");return;} S.money-=boat.cost; S.boats.push({...boat}); log(`You bought a ${boat.name}.`); renderAll(); };
+      if(bb) bb.onclick=()=>{ if(S.money<boat.cost){showToast("Not enough cash.");return;} S.money-=boat.cost; S.boats.push({...boat}); log(`You bought a ${boat.name}.`); renderAll(); };
       if(sb) sb.onclick=()=>{ S.money+=Math.round(boat.value*0.6); S.boats=S.boats.filter(x=>x.id!==boat.id); log(`You sold your ${boat.name}.`); renderAll(); };
       wrap.appendChild(bc);
     });
@@ -4972,7 +5006,7 @@ function renderAssets(mode){
         ${owned? `<button class="small-btn" data-sellplane="${plane.id}">Sell (${fmt(Math.round(plane.value*0.6))})</button>` : `<button class="small-btn gold" data-buyplane="${plane.id}" ${S.licenses.pilot?'':'disabled'}>Buy</button>`}
         </div></div>`);
       const pb = pc.querySelector("[data-buyplane]"), sp = pc.querySelector("[data-sellplane]");
-      if(pb) pb.onclick=()=>{ if(S.money<plane.cost){alert("Not enough cash.");return;} S.money-=plane.cost; S.planes.push({...plane}); log(`You bought a ${plane.name}.`); renderAll(); };
+      if(pb) pb.onclick=()=>{ if(S.money<plane.cost){showToast("Not enough cash.");return;} S.money-=plane.cost; S.planes.push({...plane}); log(`You bought a ${plane.name}.`); renderAll(); };
       if(sp) sp.onclick=()=>{ S.money+=Math.round(plane.value*0.6); S.planes=S.planes.filter(x=>x.id!==plane.id); log(`You sold your ${plane.name}.`); renderAll(); };
       wrap.appendChild(pc);
     });
@@ -4988,7 +5022,7 @@ function renderAssets(mode){
         </div></div>`);
       const gb = gc.querySelector("[data-buygun]"), sg = gc.querySelector("[data-sellgun]");
       S.firearms = S.firearms||[];
-      if(gb) gb.onclick=()=>{ if(S.money<gun.cost){alert("Not enough cash.");return;} S.money-=gun.cost; S.firearms.push({...gun}); log(`You bought a ${gun.name}.`); renderAll(); };
+      if(gb) gb.onclick=()=>{ if(S.money<gun.cost){showToast("Not enough cash.");return;} S.money-=gun.cost; S.firearms.push({...gun}); log(`You bought a ${gun.name}.`); renderAll(); };
       if(sg) sg.onclick=()=>{ S.money+=Math.round(gun.value*0.6); S.firearms=S.firearms.filter(x=>x.id!==gun.id); log(`You sold your ${gun.name}.`); renderAll(); };
       wrap.appendChild(gc);
     });
@@ -5021,7 +5055,7 @@ function renderAssets(mode){
         </div>`);
       const b = c.querySelector("[data-buy]"), se = c.querySelector("[data-sell]"), live = c.querySelector("[data-live]"), rentb = c.querySelector("[data-rentbtn]"), fin = c.querySelector("[data-finance]"), rep = c.querySelector("[data-repair]"), setr = c.querySelector("[data-setrent]");
       if(b) b.onclick=()=>{
-        if(S.money<h.cost){alert("Not enough cash.");return;}
+        if(S.money<h.cost){showToast("Not enough cash.");return;}
         S.money-=h.cost; const isFirst = S.houses.length===0;
         S.houses.push({...h, status:isFirst?"primary":"vacant", custom:false, condition:100, currentRent:h.rent});
         log(`You bought ${h.name}.`); renderAll();
@@ -5035,16 +5069,16 @@ function renderAssets(mode){
       };
       if(rep) rep.onclick=()=>{
         const cost = Math.round(h.cost*0.08);
-        if(S.money<cost){ alert("Not enough cash."); return; }
+        if(S.money<cost){ showToast("Not enough cash."); return; }
         S.money-=cost; owned.condition=100; log(`You repaired your ${h.name}.`); renderAll();
       };
       if(setr) setr.onclick=()=>{
         const val = Number(c.querySelector(`[data-rentinput="${h.id}"]`).value);
-        if(!val || val<=0){ alert("Enter a valid rent amount."); return; }
+        if(!val || val<=0){ showToast("Enter a valid rent amount."); return; }
         owned.currentRent = val; log(`You set the rent on ${h.name} to ${fmt(val)}/age.`); renderAll();
       };
       if(fin) fin.onclick=()=>{
-        if(!canFinance(h.cost)){ alert("The bank won't finance this given your salary and existing debt."); return; }
+        if(!canFinance(h.cost)){ showToast("The bank won't finance this given your salary and existing debt."); return; }
         takeFinancing(h.cost, h.name); const isFirst = S.houses.length===0;
         S.houses.push({...h, status:isFirst?"primary":"vacant", custom:false, condition:100, currentRent:h.rent});
         renderAll();
@@ -5068,7 +5102,7 @@ function renderAssets(mode){
     const invCard = el(`<div class="card"><div class="card-title">${listing.area}</div><div class="card-sub">Unlike the listings above, you can buy as many of these as you want. Pure rental income, always starts as a rental. Upkeep isn't cheap. Prices vary by neighborhood.</div>
       <button class="small-btn gold" id="buy-inv-btn" style="margin-top:8px;">Buy Investment Property (${fmt(listing.cost)})</button></div>`);
     invCard.querySelector("#buy-inv-btn").onclick=()=>{
-      if(S.money<listing.cost){ alert("Not enough cash."); return; }
+      if(S.money<listing.cost){ showToast("Not enough cash."); return; }
       S.money-=listing.cost;
       S.houses.push({id:"inv_"+Date.now()+Math.floor(Math.random()*1000), name:`Investment Property (${listing.area})`, cost:listing.cost, rent:listing.rent, currentRent:listing.rent, status:"rental", condition:100, custom:false});
       log(`You bought an investment property in the ${listing.area.toLowerCase()} and put it straight on the rental market.`);
@@ -5093,13 +5127,13 @@ function renderAssets(mode){
       };
       c.querySelector(`[data-invsetrent="${hh.id}"]`).onclick=()=>{
         const val = Number(c.querySelector(`[data-invrentinput="${hh.id}"]`).value);
-        if(!val || val<=0){ alert("Enter a valid rent amount."); return; }
+        if(!val || val<=0){ showToast("Enter a valid rent amount."); return; }
         hh.currentRent = val; log(`You set the rent on ${hh.name} to ${fmt(val)}/age.`); renderAll();
       };
       const invRep = c.querySelector(`[data-invrepair="${hh.id}"]`);
       if(invRep) invRep.onclick=()=>{
         const cost = Math.round(hh.cost*0.08);
-        if(S.money<cost){ alert("Not enough cash."); return; }
+        if(S.money<cost){ showToast("Not enough cash."); return; }
         S.money-=cost; hh.condition=100; log(`You repaired ${hh.name}.`); renderAll();
       };
       wrap.appendChild(c);
@@ -5132,7 +5166,7 @@ function renderAssets(mode){
         <button class="small-btn gold" id="startbuild-btn" style="margin-top:8px;">Buy Plot & Start Building</button></div>`);
       c.querySelector("#startbuild-btn").onclick=()=>{
         const tier = LAND_TIERS.find(lt=>lt.id===c.querySelector("#land-tier-select").value);
-        if(S.money<tier.plotCost){alert("Not enough cash.");return;}
+        if(S.money<tier.plotCost){showToast("Not enough cash.");return;}
         S.money-=tier.plotCost; S.houseBuild={invested:tier.plotCost, target:tier.target, tierName:tier.name};
         log(`You bought a ${tier.name.toLowerCase()} and started building your dream home.`);
         renderAll();
@@ -5145,7 +5179,7 @@ function renderAssets(mode){
         <div class="bar" style="margin-top:8px;"><div class="fill" style="width:${pct}%; background:var(--gold);"></div></div>
         <button class="small-btn gold" id="invest-build-btn" style="margin-top:10px;">Invest ${fmt(15000)}</button></div>`);
       c.querySelector("#invest-build-btn").onclick=()=>{
-        if(S.money<15000){alert("Not enough cash.");return;}
+        if(S.money<15000){showToast("Not enough cash.");return;}
         S.money-=15000; hb.invested+=15000;
         if(hb.invested>=hb.target){
           const newHouse = {id:"custom_"+Date.now(), name:"Custom Built Home", cost:hb.invested, rent:Math.round(hb.invested*0.11), currentRent:Math.round(hb.invested*0.11), status:"vacant", condition:100, custom:true};
@@ -5186,7 +5220,7 @@ function renderAssets(mode){
         log(`You ${hh.status==='rental'?'started':'stopped'} renting out your ${hh.name}.`); renderAll();
       };
       c.querySelector(`[data-expandcustom="${hh.id}"]`).onclick=()=>{
-        if(S.money<expandCost){ alert("Not enough cash."); return; }
+        if(S.money<expandCost){ showToast("Not enough cash."); return; }
         S.money-=expandCost; hh.cost=Math.round(hh.cost*1.3); hh.rent=Math.round(hh.rent*1.3);
         if(hh.currentRent!==undefined) hh.currentRent=Math.round(hh.currentRent*1.3);
         log(`You expanded ${hh.name} — bigger, grander, and worth more now.`); renderAll();
@@ -5194,7 +5228,7 @@ function renderAssets(mode){
       const csr = c.querySelector(`[data-customsetrent="${hh.id}"]`);
       if(csr) csr.onclick=()=>{
         const val = Number(c.querySelector(`[data-customrentinput="${hh.id}"]`).value);
-        if(!val || val<=0){ alert("Enter a valid rent amount."); return; }
+        if(!val || val<=0){ showToast("Enter a valid rent amount."); return; }
         hh.currentRent = val; log(`You set the rent on ${hh.name} to ${fmt(val)}/age.`); renderAll();
       };
       wrap.appendChild(c);
@@ -5213,7 +5247,7 @@ function renderHabits(){
       <div class="card-sub">Drug use has a real grip on you now. You can't just quit — you need rehab.</div>
       <button class="small-btn gold" id="rehab-btn" style="margin-top:8px;">Go to Rehab (${fmt(8000)})</button></div>`);
     rehabCard.querySelector("#rehab-btn").onclick=()=>{
-      if(S.money<8000){ alert("Not enough cash."); return; }
+      if(S.money<8000){ showToast("Not enough cash."); return; }
       S.money-=8000;
       if(chance(0.6)){
         S.drugAddicted=false; S.habits=(S.habits||[]).filter(h=>h!=="drug_use");
@@ -5305,7 +5339,7 @@ function renderSocial(){
     const spaceCard = el(`<div class="card"><div class="card-title">Rent Studio Space</div><div class="card-sub">Before you can install any equipment, you need a place to put it.</div>
       <button class="small-btn gold" id="buy-space-btn" style="margin-top:8px;">Buy Studio Space (${fmt(40000)})</button></div>`);
     spaceCard.querySelector("#buy-space-btn").onclick=()=>{
-      if(S.money<40000){ alert("Not enough cash."); return; }
+      if(S.money<40000){ showToast("Not enough cash."); return; }
       S.money-=40000; m.studioSpace=true; log("You secured a space for your studio."); renderAll();
     };
     wrap.appendChild(spaceCard);
@@ -5316,7 +5350,7 @@ function renderSocial(){
       const row = el(`<div class="btn-row" style="margin-top:8px;"><button class="small-btn ${owned?'gold':''}" data-lvl="${eq.level}" ${owned?'disabled':''}>${owned?'Owned':`${eq.name} (${fmt(eq.cost)})`}</button></div>`);
       const btn = row.querySelector("button");
       if(!owned) btn.onclick=()=>{
-        if(S.money<eq.cost){ alert("Not enough cash."); return; }
+        if(S.money<eq.cost){ showToast("Not enough cash."); return; }
         S.money-=eq.cost; m.equipment=eq.level; log(`You bought a ${eq.name}.`); renderAll();
       };
       eqCard.appendChild(row);
@@ -5331,13 +5365,13 @@ function renderSocial(){
       </div>`);
     const upBtn = mc.querySelector("#upgrade-eq-btn");
     if(upBtn) upBtn.onclick=()=>{
-      if(S.money<eqNext.cost){ alert("Not enough cash."); return; }
+      if(S.money<eqNext.cost){ showToast("Not enough cash."); return; }
       S.money-=eqNext.cost; m.equipment=eqNext.level; log(`You upgraded to a ${eqNext.name}.`); renderAll();
     };
     const singleBtn = mc.querySelector("#single-btn");
     if(singleBtn) singleBtn.onclick=()=>{
       const prodCost = 3000+m.equipment*1500;
-      if(S.money<prodCost){ alert("Not enough cash to cover production."); return; }
+      if(S.money<prodCost){ showToast("Not enough cash to cover production."); return; }
       S.money -= prodCost;
       m.singles++; m.singlesThisYear=(m.singlesThisYear||0)+1;
       const equipBonus = MUSIC_EQUIPMENT.find(e=>e.level===m.equipment).bonus;
@@ -5395,7 +5429,7 @@ function renderSocial(){
         const msCard = el(`<div class="card"><div class="card-title">Expand to a Full Music Studio</div><div class="card-sub">Sign other singers and build a roster of your own.</div>
           <button class="small-btn gold" id="expand-studio-btn" style="margin-top:8px;">Expand Studio (${fmt(150000)})</button></div>`);
         msCard.querySelector("#expand-studio-btn").onclick=()=>{
-          if(S.money<150000){ alert("Not enough cash."); return; }
+          if(S.money<150000){ showToast("Not enough cash."); return; }
           S.money-=150000; S.musicStudio={roster:[]};
           log("You expanded into a full music studio."); renderAll();
         };
@@ -5413,7 +5447,7 @@ function renderSocial(){
           <div class="card-sub">${studio.roster.length} signed artist(s) · ${fmt(netOf(totalRoyalty))}/age from the roster</div>
           <button class="small-btn gold" id="sign-singer-btn" style="margin-top:8px;">Sign ${candidateS.name} (Fame ${candidateS.fame}, ${fmt(signCostS)})</button></div>`);
         rosterCard.querySelector("#sign-singer-btn").onclick=()=>{
-          if(S.money<signCostS){ alert("Not enough cash."); return; }
+          if(S.money<signCostS){ showToast("Not enough cash."); return; }
           S.money-=signCostS;
           const artist = {name:candidateS.name, fame:candidateS.fame, royalty:Math.round(2000+candidateS.fame*400)};
           studio.roster.push(artist);
@@ -5503,8 +5537,8 @@ function renderPolitics(){
     };
     partyCard.querySelector("#foundparty-btn").onclick=()=>{
       const val = partyCard.querySelector("#ownparty-input").value.trim();
-      if(!val){ alert("Give your party a name first."); return; }
-      if(S.money<50000){ alert("Not enough cash — founding a party takes real capital."); return; }
+      if(!val){ showToast("Give your party a name first."); return; }
+      if(S.money<50000){ showToast("Not enough cash — founding a party takes real capital."); return; }
       S.money -= 50000;
       p.party = val; p.founderParty = true;
       S.karma = clamp(S.karma+2,-100,100);
@@ -5530,28 +5564,28 @@ function renderPolitics(){
       </div></div>`);
     govCard.querySelector("#statebudget-btn").onclick=()=>{
       if(govActionsCapped) return;
-      if((p.publicFunds||0)<100000){ alert("Not enough in the state treasury — hold a fundraiser first."); return; }
+      if((p.publicFunds||0)<100000){ showToast("Not enough in the state treasury — hold a fundraiser first."); return; }
       p.govActionsThisYear=(p.govActionsThisYear||0)+1;
       p.publicFunds-=100000; p.approval=clamp(p.approval+12,0,100); S.karma=clamp(S.karma+6,-100,100);
       log("Your state programs won public support."); renderAll();
     };
     govCard.querySelector("#infra-btn").onclick=()=>{
       if(govActionsCapped) return;
-      if((p.publicFunds||0)<150000){ alert("Not enough in the state treasury — hold a fundraiser first."); return; }
+      if((p.publicFunds||0)<150000){ showToast("Not enough in the state treasury — hold a fundraiser first."); return; }
       p.govActionsThisYear=(p.govActionsThisYear||0)+1;
       p.publicFunds-=150000; p.approval=clamp(p.approval+15,0,100); S.fameBonus=clamp((S.fameBonus||0)+3,-70,70); S.karma=clamp(S.karma+5,-100,100);
       log("New roads and bridges — residents noticed the difference."); renderAll();
     };
     govCard.querySelector("#stateedu-btn").onclick=()=>{
       if(govActionsCapped) return;
-      if((p.publicFunds||0)<120000){ alert("Not enough in the state treasury — hold a fundraiser first."); return; }
+      if((p.publicFunds||0)<120000){ showToast("Not enough in the state treasury — hold a fundraiser first."); return; }
       p.govActionsThisYear=(p.govActionsThisYear||0)+1;
       p.publicFunds-=120000; p.approval=clamp(p.approval+10,0,100); S.karma=clamp(S.karma+10,-100,100);
       log("You funded schools across the state — teachers and parents are grateful."); renderAll();
     };
     govCard.querySelector("#statepolice-btn").onclick=()=>{
       if(govActionsCapped) return;
-      if((p.publicFunds||0)<90000){ alert("Not enough in the state treasury — hold a fundraiser first."); return; }
+      if((p.publicFunds||0)<90000){ showToast("Not enough in the state treasury — hold a fundraiser first."); return; }
       p.govActionsThisYear=(p.govActionsThisYear||0)+1;
       p.publicFunds-=90000;
       if(chance(0.7)){ p.approval=clamp(p.approval+10,0,100); log("Crime dropped after the funding boost — residents feel safer."); }
@@ -5654,7 +5688,7 @@ function renderPolitics(){
       };
       campCard.querySelector("#adcampaign-btn").onclick=()=>{
         if(adCapped) return;
-        if((p.publicFunds||0)<15000){ alert("Not enough in the campaign fund — hold a fundraiser first."); return; }
+        if((p.publicFunds||0)<15000){ showToast("Not enough in the campaign fund — hold a fundraiser first."); return; }
         p.adCampaignsThisYear=(p.adCampaignsThisYear||0)+1;
         p.publicFunds-=15000;
         if(chance(0.65)){ p.campaignStrength=clamp((p.campaignStrength||0)+18,0,100); S.fameBonus=clamp((S.fameBonus||0)+3,-70,70); log("Your ad campaign got real traction."); }
@@ -5712,7 +5746,7 @@ function renderPolitics(){
       <button class="small-btn gold" id="hire-bg-btn" style="margin-top:8px;" ${bgLevel>=3?'disabled':''}>Hire More Bodyguards (${fmt((bgLevel+1)*50000)})</button></div>`);
     bgCard.querySelector("#hire-bg-btn").onclick=()=>{
       const cost=(bgLevel+1)*50000;
-      if(S.money<cost){ alert("Not enough cash."); return; }
+      if(S.money<cost){ showToast("Not enough cash."); return; }
       S.money-=cost; S.politics.bodyguards=bgLevel+1;
       log("You strengthened your security detail."); renderAll();
     };
@@ -5727,7 +5761,7 @@ function renderPolitics(){
         <button class="small-btn red" id="consolidate-btn">Consolidate Power</button>
       </div></div>`);
     policyCard.querySelector("#poverty-btn").onclick=()=>{
-      if((p.publicFunds||0)<500000){ alert("Not enough in the national treasury — fundraise or raise funds first."); return; }
+      if((p.publicFunds||0)<500000){ showToast("Not enough in the national treasury — fundraise or raise funds first."); return; }
       p.publicFunds -= 500000; p.approval=clamp(p.approval+15,0,100); S.fameBonus=clamp((S.fameBonus||0)+5,-70,70); S.karma=clamp(S.karma+10,-100,100);
       log("Your anti-poverty program won public support."); renderAll();
     };
@@ -5866,7 +5900,7 @@ function renderRentBoard(){
       <button class="small-btn ${active?'gold':''}" data-id="${r.id}" ${active?'disabled':''}>${active?'Renting':'Rent This'}</button></div></div>`);
     c.querySelector("button").onclick=()=>{
       if(active) return;
-      if(S.money<deposit){ alert(`You need ${fmt(deposit)} up front for the deposit.`); return; }
+      if(S.money<deposit){ showToast(`You need ${fmt(deposit)} up front for the deposit.`); return; }
       S.money -= deposit; S.rentalPlan={id:r.id,name:r.name,cost:r.cost}; S.rentMissedStreak=0; S.homeless=false;
       log(`You paid a ${fmt(deposit)} deposit and signed a lease on a ${r.name}.`);
       renderAll();
@@ -5896,7 +5930,7 @@ function renderPetMarket(){
       ${owned?'<span class="tag">owned</span>':`<button class="small-btn gold" data-id="${p.id}">Adopt</button>`}</div>
       ${owned?`<button class="small-btn red" data-rehome="${p.id}" style="margin-top:8px;">Rehome</button>`:''}</div>`);
     const b = c.querySelector("[data-id]"); if(b) b.onclick=()=>{
-      if(S.money<p.cost){ alert("Not enough cash."); return; }
+      if(S.money<p.cost){ showToast("Not enough cash."); return; }
       S.money-=p.cost; S.pets=S.pets||[]; S.pets.push({...p}); adjStat("happiness",6);
       log(`You adopted a ${p.name}.`); renderAll();
     };
@@ -5912,7 +5946,7 @@ function renderDatingPortal(){
     wrap.appendChild(el(`<div class="empty-note">Browse profiles to meet someone new — results vary more than meeting in person. Looking for: ${S.appearance.pref||'Everyone'}</div>`));
     const c = el(`<div class="card"><button class="small-btn gold" id="swipe-btn">Swipe on Tinder (${fmt(20)})</button></div>`);
     c.querySelector("button").onclick=()=>{
-      if(S.money<20){ alert("Not enough cash."); return; }
+      if(S.money<20){ showToast("Not enough cash."); return; }
       S.money-=20;
       const r = meetSomeone(0.45, 15, 35, "app");
       if(r){ log(r.royal?`You matched with ${r.name} on Tinder — royalty, no less!`:`You matched with ${r.name} on Tinder.`); adjStat("happiness", r.royal?12:6); }
@@ -5967,7 +6001,7 @@ function renderHoliday(){
       }
       const withFamily = btn.dataset.family==="1";
       const cost = withFamily ? familyCost : h.cost;
-      if(S.money<cost){ alert("Not enough cash."); return; }
+      if(S.money<cost){ showToast("Not enough cash."); return; }
       S.money-=cost; S._everHoliday=true; S.holidayThisYear = (S.holidayThisYear||0)+1; adjStat("happiness", rand(10,20)); adjStat("health",4);
       if(withFamily){
         adjStat("happiness",8);
@@ -5997,7 +6031,7 @@ function renderGambling(){
     <button class="small-btn gold" id="spin-btn" style="margin-top:8px;">Spin</button></div>`);
   casino.querySelector("#spin-btn").onclick=()=>{
     const bet = Number(casino.querySelector("#bet-amt").value)||0;
-    if(bet<=0 || bet>S.money){ alert("Enter a valid bet you can afford."); return; }
+    if(bet<=0 || bet>S.money){ showToast("Enter a valid bet you can afford."); return; }
     S.money -= bet; S._everGambled = true;
     const roll = Math.random();
     let mult = 0, msg;
@@ -6023,7 +6057,7 @@ function renderGambling(){
     </div></div>`);
   roulette.querySelectorAll("[data-color]").forEach(btn=> btn.onclick=()=>{
     const bet = Number(roulette.querySelector("#roulette-bet").value)||0;
-    if(bet<=0 || bet>S.money){ alert("Enter a valid bet you can afford."); return; }
+    if(bet<=0 || bet>S.money){ showToast("Enter a valid bet you can afford."); return; }
     S.money -= bet; S._everGambled = true;
     const pick = btn.dataset.color;
     const roll = Math.random();
@@ -6042,7 +6076,7 @@ function renderGambling(){
     <button class="small-btn gold" id="bj-btn" style="margin-top:8px;">Deal</button></div>`);
   blackjack.querySelector("#bj-btn").onclick=()=>{
     const bet = Number(blackjack.querySelector("#bj-bet").value)||0;
-    if(bet<=0 || bet>S.money){ alert("Enter a valid bet you can afford."); return; }
+    if(bet<=0 || bet>S.money){ showToast("Enter a valid bet you can afford."); return; }
     S.money -= bet; S._everGambled = true;
     const draw = ()=> Math.min(rand(1,10), 10);
     const playerTotal = clamp(draw()+draw()+rand(0,3), 4, 22);
@@ -6070,7 +6104,7 @@ function renderGambling(){
     const lottery = el(`<div class="card"><div class="card-title">${fmt(tier.cost)} Ticket</div><div class="card-sub">Jackpot ${fmt(tier.jackpotMin)}–${fmt(tier.jackpotMax)} · odds ~1 in ${Math.round(1/tier.odds)}.</div>
       <button class="small-btn gold" id="lotto-btn-${tier.cost}" style="margin-top:8px;">Buy Ticket</button></div>`);
     lottery.querySelector(`#lotto-btn-${tier.cost}`).onclick=()=>{
-      if(S.money<tier.cost){ alert("Not enough cash."); return; }
+      if(S.money<tier.cost){ showToast("Not enough cash."); return; }
       S.money -= tier.cost; S._everGambled = true;
       if(chance(tier.odds)){
         const jackpot = rand(tier.jackpotMin, tier.jackpotMax);
@@ -6091,7 +6125,7 @@ function renderDarkWeb(){
   const gunCard = el(`<div class="card"><div class="card-title">Anonymous Firearm</div><div class="card-sub">No license needed — for a price, and a risk.</div>
     <button class="small-btn red" id="darkgun-btn" style="margin-top:8px;">Buy (${fmt(2500)})</button></div>`);
   gunCard.querySelector("#darkgun-btn").onclick=()=>{
-    if(S.money<2500){ alert("Not enough cash."); return; }
+    if(S.money<2500){ showToast("Not enough cash."); return; }
     S.money-=2500;
     if(!S.godMode && chance(0.12)){
       const yrs=rand(1,3); S.jailYears=(S.jailYears||0)+yrs; S._everJailed=true;
@@ -6110,7 +6144,7 @@ function renderDarkWeb(){
     <button class="small-btn red" id="hackhire-btn" style="margin-top:8px;" ${hackCapped?'disabled':''}>Hire (${fmt(3000)})</button></div>`);
   hackCard.querySelector("#hackhire-btn").onclick=()=>{
     if(hackCapped) return;
-    if(S.money<3000){ alert("Not enough cash."); return; }
+    if(S.money<3000){ showToast("Not enough cash."); return; }
     S.money-=3000; S.darkWebHacksThisYear=(S.darkWebHacksThisYear||0)+1;
     if(!S.godMode && chance(0.2)){
       const yrs=rand(1,4); S.jailYears=(S.jailYears||0)+yrs; S._everJailed=true;
@@ -6128,7 +6162,7 @@ function renderDarkWeb(){
     <button class="small-btn red" id="fakeid-btn" style="margin-top:8px;" ${S.hasFakeIdKit?'disabled':''}>${S.hasFakeIdKit?'Already Purchased':`Buy (${fmt(15000)})`}</button></div>`);
   idCard.querySelector("#fakeid-btn").onclick=()=>{
     if(S.hasFakeIdKit) return;
-    if(S.money<15000){ alert("Not enough cash."); return; }
+    if(S.money<15000){ showToast("Not enough cash."); return; }
     S.money-=15000; S.hasFakeIdKit=true;
     log("You bought a fake ID kit. It'll make disappearing easier.");
     renderAll();
@@ -6153,7 +6187,7 @@ function renderComputer(){
       ${S.phoneCooldown?'<div class="card-sub" style="margin-top:6px;">They\'ve said no three times — give it a year before asking again.</div>':S.phoneAskedThisAge?'<div class="card-sub" style="margin-top:6px;">Already asked this year.</div>':''}
       </div>`);
     buyCard.querySelector("#buy-phone-btn").onclick = ()=>{
-      if(S.money<400){ alert("Not enough cash."); return; }
+      if(S.money<400){ showToast("Not enough cash."); return; }
       S.money -= 400; S.ownsPhone = true;
       log("You bought a smartphone."); renderAll();
     };
@@ -6915,7 +6949,7 @@ function ageUp(){
 function showDeath(){
   const d = document.getElementById("deathscreen");
   d.innerHTML = `
-    <div class="intro-eyebrow">THE LEDGER — FINAL ENTRY</div>
+    <div class="intro-eyebrow">THE LEDGER LIFE — FINAL ENTRY</div>
     <h1>${S.name}</h1>
     <div style="font-family:var(--mono); color:var(--muted); margin-bottom:20px;">Died at age ${S.age} in ${S.country}${S.deathCause?`<br>Cause: ${S.deathCause}`:''}<br>Net worth at death: ${fmt(netWorth())}<br>Generation ${S.generation||1} · ${Object.keys(S.achievements).length} achievements</div>
     <div style="flex:1; overflow-y:auto; border-top:1px solid var(--border); padding-top:14px;">
@@ -7160,8 +7194,23 @@ async function init(){
   const titleScreen = document.getElementById("title-screen");
   const introScreen = document.getElementById("intro");
   titleScreen.style.display = "flex";
+  const positionTitleFlourish = ()=>{
+    const wrap = document.getElementById("title-flourish-wrap");
+    const flourish = document.getElementById("title-the-flourish");
+    const eTarget = document.getElementById("title-e-target");
+    if(!wrap || !flourish || !eTarget) return;
+    const wrapRect = wrap.getBoundingClientRect();
+    const eRect = eTarget.getBoundingClientRect();
+    const eCenter = (eRect.left + eRect.right)/2 - wrapRect.left;
+    flourish.style.left = (eCenter - flourish.offsetWidth/2) + "px";
+  };
+  positionTitleFlourish();
+  if(document.fonts && document.fonts.ready){ document.fonts.ready.then(positionTitleFlourish); }
+  setTimeout(positionTitleFlourish, 400);
+  setTimeout(positionTitleFlourish, 1200);
+  window.addEventListener("resize", positionTitleFlourish);
   const versionLabel = document.getElementById("app-version-label");
-  if(versionLabel) versionLabel.textContent = `v${APP_VERSION}`;
+  if(versionLabel) versionLabel.textContent = `Created by Aethelgard · v${APP_VERSION}`;
   initGoogleSignIn();
   S = hasSave ? migrateState(loaded) : freshState("", "United States");
   const continueBtn = document.getElementById("title-continue-btn");

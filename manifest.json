@@ -1,6 +1,6 @@
 {
-  "name": "The Ledger — A Life, Kept",
-  "short_name": "The Ledger",
+  "name": "The Ledger Life — A Life, Kept",
+  "short_name": "Ledger Life",
   "description": "A life simulation game.",
   "start_url": "./index.html",
   "scope": "./",
