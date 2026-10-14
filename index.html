@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
 <title>The Ledger Life — A Life, Kept</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#141414">
@@ -31,10 +31,10 @@
   --mono:'JetBrains Mono', 'Courier New', monospace;
   --sans:'Inter', -apple-system, sans-serif;
 }
-*{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent; touch-action:manipulation;}
 html,body{height:100%;}
-html{ overscroll-behavior-y: none; }
-body{ margin:0; background:var(--bg); color:var(--text); font-family:var(--sans); display:flex; justify-content:center; overscroll-behavior-y: none; }
+html{ overscroll-behavior-y: none; touch-action:manipulation; }
+body{ margin:0; background:var(--bg); color:var(--text); font-family:var(--sans); display:flex; justify-content:center; overscroll-behavior-y: none; touch-action:manipulation; }
 #app{ width:100%; max-width:480px; min-height:100vh; background:var(--bg); color:var(--text); display:flex; flex-direction:column; position:relative; border-left:1px solid var(--border); border-right:1px solid var(--border); }
 
 #intro{ flex:1; display:flex; flex-direction:column; justify-content:center; padding:32px 24px; overflow-y:auto; overscroll-behavior-y: contain;
@@ -273,6 +273,38 @@ body{ margin:0; background:var(--bg); color:var(--text); font-family:var(--sans)
 </div>
 
 <script>
+/* ============================= ZOOM LOCK ============================= */
+/* Blocks pinch-zoom, double-tap zoom, and ctrl/cmd+wheel or ctrl/cmd+keyboard zoom. */
+(function(){
+  // iOS Safari pinch gesture events
+  document.addEventListener('gesturestart', function(e){ e.preventDefault(); }, { passive:false });
+  document.addEventListener('gesturechange', function(e){ e.preventDefault(); }, { passive:false });
+  document.addEventListener('gestureend', function(e){ e.preventDefault(); }, { passive:false });
+
+  // Multi-touch pinch (two or more fingers) on any browser
+  document.addEventListener('touchmove', function(e){
+    if (e.touches && e.touches.length > 1) e.preventDefault();
+  }, { passive:false });
+
+  // Double-tap-to-zoom
+  var lastTouchEnd = 0;
+  document.addEventListener('touchend', function(e){
+    var now = Date.now();
+    if (now - lastTouchEnd <= 300) e.preventDefault();
+    lastTouchEnd = now;
+  }, { passive:false });
+
+  // Ctrl/Cmd + mouse wheel zoom (desktop trackpads/browsers)
+  document.addEventListener('wheel', function(e){
+    if (e.ctrlKey || e.metaKey) e.preventDefault();
+  }, { passive:false });
+
+  // Ctrl/Cmd +/-/0 keyboard zoom
+  document.addEventListener('keydown', function(e){
+    if ((e.ctrlKey || e.metaKey) && ['+','-','=','0'].includes(e.key)) e.preventDefault();
+  }, { passive:false });
+})();
+
 /* ============================= DATA ============================= */
 const COUNTRIES = ["United States","United Kingdom","Japan","Brazil","Germany","Australia","Singapore","United Arab Emirates","Switzerland","Canada","South Korea","Nigeria","Mexico","India","France","Monaco","Cayman Islands","Bahamas","Norway"];
 const COUNTRY_INFO = {
