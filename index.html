@@ -281,18 +281,9 @@ body{ margin:0; background:var(--bg); color:var(--text); font-family:var(--sans)
   document.addEventListener('gesturechange', function(e){ e.preventDefault(); }, { passive:false });
   document.addEventListener('gestureend', function(e){ e.preventDefault(); }, { passive:false });
 
-  // Multi-touch pinch (two or more fingers) on any browser
-  document.addEventListener('touchmove', function(e){
-    if (e.touches && e.touches.length > 1) e.preventDefault();
-  }, { passive:false });
-
-  // Double-tap-to-zoom
-  var lastTouchEnd = 0;
-  document.addEventListener('touchend', function(e){
-    var now = Date.now();
-    if (now - lastTouchEnd <= 300) e.preventDefault();
-    lastTouchEnd = now;
-  }, { passive:false });
+  // Pinch and double-tap zoom are already blocked by the viewport meta
+  // (user-scalable=no) and CSS touch-action: manipulation. No touchmove/touchend
+  // handlers here on purpose: they made buttons miss taps and menu swipes stick.
 
   // Ctrl/Cmd + mouse wheel zoom (desktop trackpads/browsers)
   document.addEventListener('wheel', function(e){
