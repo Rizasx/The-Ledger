@@ -1468,6 +1468,10 @@ function openSettingsModal(){
       <button class="btn ${S.dlc?'secondary':''}" id="settings-dlc-btn" style="margin-top:10px;">${S.dlc?"Manage":"Unlock DLC"}</button></div>
     <div class="card"><div class="card-row"><div class="card-title">Achievements</div><div class="card-sub">${unlocked}/${ACHIEVEMENTS.length}</div></div>
       <button class="btn secondary" id="settings-ach-btn" style="margin-top:10px;">View</button></div>
+    <div class="card"><div class="card-row"><div class="card-title">💡 Suggestions</div><div class="card-sub">Ideas, bugs, feature requests</div></div>
+      <button class="btn secondary" id="settings-suggest-btn" style="margin-top:10px;">Send Suggestion</button></div>
+    <div class="card"><div class="card-row"><div class="card-title">⭐ Rate The Ledger Life</div><div class="card-sub">Leave a review on Google Play</div></div>
+      <button class="btn gold" id="settings-review-btn" style="margin-top:10px;">Rate on Google Play</button></div>
     <div style="text-align:center; margin-top:14px; font-family:var(--mono); font-size:11px; color:#57523f;">Created by Aethelgard · v${APP_VERSION}</div>
     <button class="btn secondary" id="close-modal-btn" style="margin-top:6px;">Close</button>
   `;
@@ -1491,6 +1495,42 @@ function openSettingsModal(){
     });
   };
   document.getElementById("settings-ach-btn").onclick = openAchievementsModal;
+  document.getElementById("settings-suggest-btn").onclick = openSuggestionModal;
+  document.getElementById("settings-review-btn").onclick = openPlayReview;
+  document.getElementById("close-modal-btn").onclick = closeModal;
+}
+const SUGGESTION_EMAIL = "Rizwan@stromtek.no";
+const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.ledgerlife";
+function openPlayReview(){
+  try{ window.open(PLAY_STORE_URL, "_blank"); }
+  catch(e){ window.location.href = PLAY_STORE_URL; }
+}
+function openSuggestionModal(){
+  const body = `
+    <h3>💡 Suggestion Box</h3>
+    <div class="modal-sub">Got an idea, found a bug, or want to see something added? Tell us — every message is read.</div>
+    <select id="suggest-type" style="width:100%; background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:10px; border-radius:3px; margin-bottom:8px;">
+      <option>💡 Idea / feature request</option>
+      <option>🐞 Bug report</option>
+      <option>⚖️ Balance / difficulty</option>
+      <option>💬 Other</option>
+    </select>
+    <textarea id="suggest-text" rows="6" maxlength="1500" placeholder="Write your suggestion here…" style="width:100%; background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:10px; border-radius:3px; font-family:inherit; resize:vertical;"></textarea>
+    <button class="btn" id="suggest-send-btn" style="margin-top:8px;">Send</button>
+    <button class="btn secondary" id="suggest-review-btn" style="margin-top:8px;">⭐ Rate on Google Play instead</button>
+    <button class="btn secondary" id="close-modal-btn" style="margin-top:8px;">Cancel</button>
+  `;
+  openModal(body);
+  document.getElementById("suggest-send-btn").onclick = ()=>{
+    const text = document.getElementById("suggest-text").value.trim();
+    const type = document.getElementById("suggest-type").value;
+    if(!text){ showToast("Please write something first."); return; }
+    const subject = "The Ledger Life suggestion: " + type.replace(/^[^\w]+/,"");
+    const bodyTxt = text + "\n\n— Sent from The Ledger Life v" + APP_VERSION;
+    window.location.href = "mailto:" + SUGGESTION_EMAIL + "?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(bodyTxt);
+    showToast("Opening your email app…");
+  };
+  document.getElementById("suggest-review-btn").onclick = openPlayReview;
   document.getElementById("close-modal-btn").onclick = closeModal;
 }
 function openDLCOnlyModal(){
