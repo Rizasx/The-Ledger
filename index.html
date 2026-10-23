@@ -151,6 +151,7 @@ body{ margin:0; background:var(--bg); color:var(--text); font-family:var(--sans)
 .toast.leaving{ animation: toastOut .22s ease forwards; }
 @keyframes toastIn{ to{ opacity:1; transform:translateY(0); } }
 @keyframes toastOut{ to{ opacity:0; transform:translateY(12px); } }
+body.hc{ --border:#9a9a9a; } body.hc .card-sub, body.hc .modal-sub{ color:#ececec !important; }
 </style>
 </head>
 <body>
@@ -827,9 +828,7 @@ async function purchasePlayProduct(productKey, onSuccess){
   if(!service){
     // Not running inside the Play Store app (e.g. testing in a regular browser or the plain PWA).
     // Purchases aren't possible here, so let the caller decide how to handle it.
-    let ref=""; try{ ref=document.referrer||"none"; }catch(e){}
-    const standalone = (window.matchMedia && matchMedia("(display-mode: standalone)").matches) ? "standalone" : "browser-tab";
-    showToast("Purchases are only available when this app is installed from the Google Play Store. [" + _dgDiag + " | " + standalone + " | ref: " + ref + "]");
+    showToast("Purchases are only available when this app is installed from the Google Play Store.");
     return;
   }
   let stage="listPurchases";
@@ -853,7 +852,10 @@ async function purchasePlayProduct(productKey, onSuccess){
     if(service.acknowledge) await service.acknowledge(response.details.purchaseToken || response.details.token, "onetime");
     onSuccess();
   }catch(e){
-    if(e && e.name !== "AbortError") showToast("Purchase didn't go through. [" + stage + ": " + ((e && (e.name+": "+e.message)) || e) + "]");
+    if(e && e.name !== "AbortError"){
+      try{ console.warn("Purchase failed at " + stage + ":", e); }catch(_){}
+      showToast("Purchase didn't go through. Please try again.");
+    }
   }
 }
 
@@ -935,7 +937,8 @@ function freshState(name, country, appearance){
   };
 }
 
-function save(){
+function save(force){
+  if(!force && PREFS.autosave===false) return;
   try{ localStorage.setItem(SAVE_KEY, JSON.stringify(S)); }catch(e){}
   try{ window.storage && window.storage.set(SAVE_KEY, JSON.stringify(S), false); }catch(e){}
 }
@@ -947,15 +950,120 @@ async function tryLoad(){
 
 /* ============================= HELPERS ============================= */
 let audioCtx = null;
+/* ===== PREFERENCES + MUSIC ENGINE (round 1) ===== */
+const PREFS_KEY = "ledger-prefs-v1";
+const PREFS_DEFAULT = {musicOn:true, musicVol:0.5, sfxVol:1, track:"noir", difficulty:"normal", textScale:1, contrast:false, vibration:true, autosave:true};
+let PREFS = Object.assign({}, PREFS_DEFAULT);
+try{ Object.assign(PREFS, JSON.parse(localStorage.getItem(PREFS_KEY)||"{}")); }catch(e){}
+function savePrefs(){ try{ localStorage.setItem(PREFS_KEY, JSON.stringify(PREFS)); }catch(e){} }
+const MUSIC_TRACKS = {
+  noir:     {name:"Ledger Noir",  bpm:66, wave:"triangle", density:0.45, melody:0.35,
+             chords:[[57,60,64,67],[53,57,60,64],[50,53,57,60],[52,56,59,62]], scale:[69,72,74,76,79,81]},
+  golden:   {name:"Golden Hour",  bpm:84, wave:"sine",     density:0.6,  melody:0.4,
+             chords:[[60,64,67,71],[57,60,64,67],[53,57,60,64],[55,59,62,65]], scale:[72,74,76,79,81,84]},
+  midnight: {name:"Midnight",     bpm:54, wave:"sine",     density:0.25, melody:0.25,
+             chords:[[50,57,60,64],[46,53,57,62],[55,58,62,65],[57,60,64,67]], scale:[74,77,79,81,84]}
+};
+const MUSIC = {out:null, timer:null, next:0, step:0, running:false};
+function _mtof(m){ return 440*Math.pow(2,(m-69)/12); }
+function _musicNote(freq, t, dur, type, vol, attack, rel){
+  const ctx = audioCtx; if(!ctx) return;
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(vol, t+attack);
+  g.gain.exponentialRampToValueAtTime(0.0001, t+dur+rel);
+  o.connect(g); g.connect(MUSIC.out);
+  o.start(t); o.stop(t+dur+rel+0.05);
+}
+function _musicBuild(){
+  if(MUSIC.out) return true;
+  const AC = window.AudioContext||window.webkitAudioContext; if(!AC) return false;
+  if(!audioCtx) audioCtx = new AC();
+  const ctx = audioCtx;
+  MUSIC.master = ctx.createGain(); MUSIC.master.gain.value = PREFS.musicVol*0.9;
+  const filt = ctx.createBiquadFilter(); filt.type = "lowpass"; filt.frequency.value = 2200;
+  const delay = ctx.createDelay(1.0); delay.delayTime.value = 0.36;
+  const fb = ctx.createGain(); fb.gain.value = 0.32;
+  const wet = ctx.createGain(); wet.gain.value = 0.35;
+  MUSIC.out = ctx.createGain();
+  MUSIC.out.connect(filt);
+  filt.connect(MUSIC.master);
+  filt.connect(delay); delay.connect(fb); fb.connect(delay); delay.connect(wet); wet.connect(MUSIC.master);
+  MUSIC.master.connect(ctx.destination);
+  return true;
+}
+function _musicStep(step, t){
+  const tr = MUSIC_TRACKS[PREFS.track] || MUSIC_TRACKS.noir;
+  const sd = 60/tr.bpm/2;
+  const bar = Math.floor(step/16) % tr.chords.length;
+  const pos = step % 16;
+  const chord = tr.chords[bar];
+  if(pos===0) chord.forEach(n=> _musicNote(_mtof(n), t, 16*sd, "sine", 0.045, 1.4, 1.6));
+  if(pos===0 || pos===8) _musicNote(_mtof(chord[0]-12), t, 5*sd, "triangle", 0.09, 0.03, 0.6);
+  if(pos%2===0 && Math.random()<tr.density){
+    const n = chord[rand(0,chord.length-1)] + (Math.random()<0.5?12:0);
+    _musicNote(_mtof(n), t, 3*sd, tr.wave, 0.035, 0.02, 0.9);
+  }
+  if(pos%4===0 && Math.random()<tr.melody){
+    const n = tr.scale[rand(0,tr.scale.length-1)];
+    _musicNote(_mtof(n), t, 4*sd, tr.wave, 0.04, 0.05, 1.1);
+  }
+}
+function _musicTick(){
+  const ctx = audioCtx; if(!ctx || !MUSIC.running) return;
+  const tr = MUSIC_TRACKS[PREFS.track] || MUSIC_TRACKS.noir;
+  const sd = 60/tr.bpm/2;
+  while(MUSIC.next < ctx.currentTime + 0.6){
+    _musicStep(MUSIC.step, MUSIC.next);
+    MUSIC.next += sd; MUSIC.step++;
+  }
+}
+function musicStart(){
+  if(!PREFS.musicOn || MUSIC.running || document.hidden) return;
+  try{
+    if(!_musicBuild()) return;
+    if(audioCtx.state==="suspended") audioCtx.resume();
+    MUSIC.running = true; MUSIC.step = 0; MUSIC.next = audioCtx.currentTime + 0.15;
+    MUSIC.timer = setInterval(_musicTick, 150);
+  }catch(e){ MUSIC.running = false; }
+}
+function musicStop(){
+  MUSIC.running = false;
+  if(MUSIC.timer){ clearInterval(MUSIC.timer); MUSIC.timer = null; }
+}
+function musicSetVolume(){
+  if(MUSIC.master) MUSIC.master.gain.value = PREFS.musicVol*0.9;
+}
+function musicArm(){
+  const first = ()=>{
+    document.removeEventListener("pointerdown", first, true);
+    document.removeEventListener("touchstart", first, true);
+    musicStart();
+  };
+  document.addEventListener("pointerdown", first, true);
+  document.addEventListener("touchstart", first, true);
+  document.addEventListener("visibilitychange", ()=>{
+    if(document.hidden){ musicStop(); try{ audioCtx && audioCtx.suspend(); }catch(e){} }
+    else { try{ audioCtx && audioCtx.resume(); }catch(e){} musicStart(); }
+  });
+}
+function applyPrefs(){
+  const app = document.getElementById("app");
+  if(app) app.style.zoom = PREFS.textScale===1 ? "" : String(PREFS.textScale);
+  document.body.classList.toggle("hc", !!PREFS.contrast);
+}
+function difficultyFactor(){ return PREFS.difficulty==="easy" ? 0.7 : PREFS.difficulty==="hard" ? 1.35 : 1; }
+
 function playClickSound(){
-  if(!S || !S.soundOn) return;
+  if(!S || !S.soundOn || PREFS.sfxVol<=0) return;
   try{
     if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
     const osc = audioCtx.createOscillator();
     const gain = audioCtx.createGain();
     osc.type = "sine";
     osc.frequency.value = 600;
-    gain.gain.value = 0.05;
+    gain.gain.value = 0.05*PREFS.sfxVol;
     osc.connect(gain); gain.connect(audioCtx.destination);
     osc.start();
     gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime+0.08);
@@ -987,6 +1095,7 @@ function adjStat(k,delta,raw){
   if(k==="looks" && delta>0 && !raw){
     delta = delta * 0.3;
   }
+  if(k==="health" && delta<0) delta = delta*difficultyFactor();
   S.stats[k] = clamp(Math.round(S.stats[k]+delta), 0, 100);
 }
 function recalcFame(){
@@ -1468,6 +1577,12 @@ function openSettingsModal(){
       <button class="btn ${S.dlc?'secondary':''}" id="settings-dlc-btn" style="margin-top:10px;">${S.dlc?"Manage":"Unlock DLC"}</button></div>
     <div class="card"><div class="card-row"><div class="card-title">Achievements</div><div class="card-sub">${unlocked}/${ACHIEVEMENTS.length}</div></div>
       <button class="btn secondary" id="settings-ach-btn" style="margin-top:10px;">View</button></div>
+    <div class="card"><div class="card-row"><div class="card-title">🎯 Daily Goals</div><div class="card-sub">Earn Legacy Points every day</div></div>
+      <button class="btn secondary" id="settings-daily-btn" style="margin-top:10px;">View</button></div>
+    <div class="card"><div class="card-row"><div class="card-title">🏛️ Legacy Perks</div><div class="card-sub">Permanent bonuses for every new life</div></div>
+      <button class="btn secondary" id="settings-legacy-btn" style="margin-top:10px;">Open</button></div>
+    <div class="card"><div class="card-row"><div class="card-title">🎛️ Audio & Game</div><div class="card-sub">Music, difficulty, text size, backup</div></div>
+      <button class="btn secondary" id="settings-gs-btn" style="margin-top:10px;">Open</button></div>
     <div class="card"><div class="card-row"><div class="card-title">💡 Suggestions</div><div class="card-sub">Ideas, bugs, feature requests</div></div>
       <button class="btn secondary" id="settings-suggest-btn" style="margin-top:10px;">Send Suggestion</button></div>
     <div class="card"><div class="card-row"><div class="card-title">⭐ Rate The Ledger Life</div><div class="card-sub">Leave a review on Google Play</div></div>
@@ -1495,10 +1610,121 @@ function openSettingsModal(){
     });
   };
   document.getElementById("settings-ach-btn").onclick = openAchievementsModal;
+  document.getElementById("settings-gs-btn").onclick = openGameSettingsModal;
+  document.getElementById("settings-daily-btn").onclick = openDailyModal;
+  document.getElementById("settings-legacy-btn").onclick = openLegacyModal;
   document.getElementById("settings-suggest-btn").onclick = openSuggestionModal;
   document.getElementById("settings-review-btn").onclick = openPlayReview;
   document.getElementById("close-modal-btn").onclick = closeModal;
 }
+/* ===== AUDIO & GAME SETTINGS, SAVE EXPORT/IMPORT (round 1) ===== */
+const TEXT_SCALES = [{v:0.9,n:"Small"},{v:1,n:"Normal"},{v:1.12,n:"Large"},{v:1.25,n:"Extra large"}];
+function _cycle(list, cur){ const i = list.indexOf(cur); return list[(i+1)%list.length]; }
+function openGameSettingsModal(){
+  const trackKeys = Object.keys(MUSIC_TRACKS);
+  const scaleName = (TEXT_SCALES.find(x=>x.v===PREFS.textScale)||TEXT_SCALES[1]).n;
+  const diffLabel = {easy:"Easy (health losses −30%)", normal:"Normal", hard:"Hard (health losses +35%)"}[PREFS.difficulty];
+  const row = (title, sub, id, label, cls)=>`<div class="card"><div class="card-row"><div class="card-title">${title}</div><div class="card-sub">${sub}</div></div>
+      <button class="btn ${cls||'secondary'}" id="${id}" style="margin-top:10px;">${label}</button></div>`;
+  const body = `
+    <h3>🎛️ Audio & Game</h3>
+    ${row("🎵 Music", PREFS.musicOn?"On":"Off", "gs-music", PREFS.musicOn?"Turn Off":"Turn On")}
+    ${row("🎼 Track", MUSIC_TRACKS[PREFS.track].name, "gs-track", "Next Track")}
+    <div class="card"><div class="card-row"><div class="card-title">🔊 Music Volume</div><div class="card-sub" id="gs-mvol-l">${Math.round(PREFS.musicVol*100)}%</div></div>
+      <input type="range" id="gs-mvol" min="0" max="100" value="${Math.round(PREFS.musicVol*100)}" style="width:100%; margin-top:10px;"></div>
+    <div class="card"><div class="card-row"><div class="card-title">🔔 Effects Volume</div><div class="card-sub" id="gs-svol-l">${Math.round(PREFS.sfxVol*100)}%</div></div>
+      <input type="range" id="gs-svol" min="0" max="100" value="${Math.round(PREFS.sfxVol*100)}" style="width:100%; margin-top:10px;"></div>
+    ${row("🎚️ Difficulty", diffLabel, "gs-diff", "Change")}
+    ${row("🔠 Text Size", scaleName, "gs-text", "Change")}
+    ${row("🌗 High Contrast", PREFS.contrast?"On":"Off", "gs-contrast", PREFS.contrast?"Turn Off":"Turn On")}
+    ${row("📳 Vibration", PREFS.vibration?"On":"Off", "gs-vib", PREFS.vibration?"Turn Off":"Turn On")}
+    ${row("💾 Auto-save", PREFS.autosave?"On":"Off — use Save Now to save", "gs-auto", PREFS.autosave?"Turn Off":"Turn On")}
+    ${row("💾 Save Now", "Write your life to this device", "gs-savenow", "Save Now")}
+    ${row("📤 Export Save", "Copy a backup code to move to another phone", "gs-export", "Export")}
+    ${row("📥 Import Save", "Paste a backup code to restore a life", "gs-import", "Import")}
+    ${row("🗑️ Delete Saved Game", "Erases your current life from this device", "gs-delete", "Delete")}
+    <button class="btn secondary" id="close-modal-btn" style="margin-top:6px;">Close</button>
+  `;
+  openModal(body);
+  const $ = id=>document.getElementById(id);
+  const changed = ()=>{ savePrefs(); applyPrefs(); openGameSettingsModal(); };
+  $("gs-music").onclick = ()=>{ PREFS.musicOn=!PREFS.musicOn; if(PREFS.musicOn) musicStart(); else musicStop(); changed(); };
+  $("gs-track").onclick = ()=>{ PREFS.track=_cycle(trackKeys, PREFS.track); MUSIC.step=0; if(PREFS.musicOn && !MUSIC.running) musicStart(); changed(); };
+  $("gs-mvol").oninput = (e)=>{ PREFS.musicVol = e.target.value/100; $("gs-mvol-l").textContent = e.target.value+"%"; musicSetVolume(); };
+  $("gs-mvol").onchange = savePrefs;
+  $("gs-svol").oninput = (e)=>{ PREFS.sfxVol = e.target.value/100; $("gs-svol-l").textContent = e.target.value+"%"; };
+  $("gs-svol").onchange = ()=>{ savePrefs(); playClickSound(); };
+  $("gs-diff").onclick = ()=>{ PREFS.difficulty=_cycle(["easy","normal","hard"], PREFS.difficulty); changed(); };
+  $("gs-text").onclick = ()=>{ const vs=TEXT_SCALES.map(x=>x.v); PREFS.textScale=_cycle(vs, PREFS.textScale); changed(); };
+  $("gs-contrast").onclick = ()=>{ PREFS.contrast=!PREFS.contrast; changed(); };
+  $("gs-vib").onclick = ()=>{ PREFS.vibration=!PREFS.vibration; changed(); };
+  $("gs-auto").onclick = ()=>{ PREFS.autosave=!PREFS.autosave; changed(); };
+  $("gs-savenow").onclick = ()=>{ save(true); showToast("Game saved."); };
+  $("gs-export").onclick = openExportModal;
+  $("gs-import").onclick = openImportModal;
+  $("gs-delete").onclick = ()=>{
+    showConfirm("Delete your saved game? This cannot be undone.", ()=>{
+      try{ localStorage.removeItem(SAVE_KEY); }catch(e){}
+      try{ window.storage && window.storage.delete && window.storage.delete(SAVE_KEY, false); }catch(e){}
+      location.reload();
+    });
+  };
+  $("close-modal-btn").onclick = closeModal;
+}
+function _encodeSave(){ return "LEDGER1:" + btoa(unescape(encodeURIComponent(JSON.stringify(S)))); }
+function _decodeSave(code){
+  code = (code||"").trim();
+  if(!code.startsWith("LEDGER1:")) throw new Error("Not a Ledger backup code.");
+  const obj = JSON.parse(decodeURIComponent(escape(atob(code.slice(8)))));
+  if(!obj || typeof obj!=="object" || typeof obj.age!=="number" || !obj.stats) throw new Error("Backup code is damaged.");
+  return obj;
+}
+function openExportModal(){
+  const code = _encodeSave();
+  const body = `
+    <h3>📤 Export Save</h3>
+    <div class="modal-sub">Copy this code and keep it somewhere safe (notes, email to yourself). On another phone choose Import Save and paste it.</div>
+    <textarea id="exp-text" rows="6" readonly style="width:100%; background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:10px; border-radius:3px; font-family:var(--mono); font-size:11px;">${code}</textarea>
+    <button class="btn" id="exp-copy" style="margin-top:8px;">Copy Code</button>
+    <button class="btn secondary" id="exp-file" style="margin-top:8px;">Download as File</button>
+    <button class="btn secondary" id="close-modal-btn" style="margin-top:8px;">Close</button>
+  `;
+  openModal(body);
+  document.getElementById("exp-copy").onclick = async ()=>{
+    const ta = document.getElementById("exp-text");
+    try{ await navigator.clipboard.writeText(code); showToast("Copied to clipboard."); }
+    catch(e){ ta.select(); try{ document.execCommand("copy"); showToast("Copied to clipboard."); }catch(e2){ showToast("Select the text and copy it manually."); } }
+  };
+  document.getElementById("exp-file").onclick = ()=>{
+    try{
+      const blob = new Blob([code], {type:"text/plain"});
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob); a.download = "ledger-life-backup.txt";
+      document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 500);
+    }catch(e){ showToast("Download not supported here — use Copy Code."); }
+  };
+  document.getElementById("close-modal-btn").onclick = closeModal;
+}
+function openImportModal(){
+  const body = `
+    <h3>📥 Import Save</h3>
+    <div class="modal-sub">Paste a backup code. This will replace the life currently saved on this device.</div>
+    <textarea id="imp-text" rows="6" placeholder="LEDGER1:…" style="width:100%; background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:10px; border-radius:3px; font-family:var(--mono); font-size:11px;"></textarea>
+    <button class="btn" id="imp-go" style="margin-top:8px;">Restore</button>
+    <button class="btn secondary" id="close-modal-btn" style="margin-top:8px;">Cancel</button>
+  `;
+  openModal(body);
+  document.getElementById("imp-go").onclick = ()=>{
+    let obj;
+    try{ obj = _decodeSave(document.getElementById("imp-text").value); }
+    catch(e){ showToast(e.message || "Invalid backup code."); return; }
+    try{ localStorage.setItem(SAVE_KEY, JSON.stringify(obj)); }catch(e){ showToast("Could not write save."); return; }
+    showToast("Restored. Reloading…");
+    setTimeout(()=>location.reload(), 600);
+  };
+  document.getElementById("close-modal-btn").onclick = closeModal;
+}
+
 const SUGGESTION_EMAIL = "Rizwan@stromtek.no";
 const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.ledgerlife";
 function openPlayReview(){
@@ -7152,6 +7378,7 @@ function ageUp(){
 /* ============================= DEATH SCREEN ============================= */
 function showDeath(){
   const d = document.getElementById("deathscreen");
+  const _legacyPts = awardLegacy();
   d.innerHTML = `
     <div class="intro-eyebrow">THE LEDGER LIFE — FINAL ENTRY</div>
     <h1>${S.name}</h1>
@@ -7159,10 +7386,15 @@ function showDeath(){
     <div style="flex:1; overflow-y:auto; border-top:1px solid var(--border); padding-top:14px;">
       ${S.log.slice(0,40).map(item=>`<div class="feed-item"><span class="age-mark">AGE ${item.age}</span>${item.text}</div>`).join("")}
     </div>
+    ${_legacyPts?`<div class="card" style="border-color:var(--gold); margin-top:12px;"><div class="card-row"><div class="card-title">🏛️ Legacy Points earned</div><div class="money">+${_legacyPts}</div></div><div class="card-sub">Total: ${META.points} — spend them in Settings → Legacy Perks.</div></div>`:''}
+    <button class="btn gold" id="share-life-btn" style="margin-top:12px;">📸 Share your life</button>
+    <button class="btn secondary" id="legacy-perks-btn" style="margin-top:10px;">🏛️ Legacy Perks</button>
     <button class="btn" id="restart-btn" style="margin-top:18px;">Start a new life</button>
     ${S.dlc?'<button class="btn gold" id="revive-btn" style="margin-top:10px;">✨ Revive (God Mode)</button>':''}
   `;
   d.classList.add("show");
+  d.querySelector("#share-life-btn").onclick = shareLife;
+  d.querySelector("#legacy-perks-btn").onclick = openLegacyModal;
   const reviveBtn = d.querySelector("#revive-btn");
   if(reviveBtn) reviveBtn.onclick = ()=>{
     S.alive = true; S.deathCause = null;
@@ -7429,7 +7661,7 @@ async function init(){
       }
     }
   });
-  document.getElementById("app").addEventListener("click", (e)=>{ if(e.target.closest("button")) playClickSound(); });
+  document.getElementById("app").addEventListener("click", (e)=>{ if(e.target.closest("button")){ playClickSound(); if(PREFS.vibration && navigator.vibrate){ try{ navigator.vibrate(12); }catch(_){} } } });
   const loaded = await tryLoad();
   const hasSave = !!(loaded && loaded.alive);
   const titleScreen = document.getElementById("title-screen");
@@ -7454,6 +7686,7 @@ async function init(){
   if(versionLabel) versionLabel.textContent = `Created by Aethelgard · v${APP_VERSION}`;
   initGoogleSignIn();
   S = hasSave ? migrateState(loaded) : freshState("", "United States");
+  applyPrefs(); musicArm();
   const continueBtn = document.getElementById("title-continue-btn");
   if(hasSave) continueBtn.style.display = "";
   continueBtn.onclick = ()=>{
@@ -7491,6 +7724,7 @@ async function init(){
     };
     S = freshState(name, country, appearance);
     S.religion = document.getElementById("in-religion").value;
+    applyLegacyPerks();
     log(`${name} was born in ${country}.`);
     startShell();
   };
@@ -7502,10 +7736,538 @@ async function init(){
     S = freshState(name, country, appearance);
     const religions = ["None","Christian","Muslim","Jewish","Hindu","Buddhist","Spiritual","Agnostic","Atheist"];
     S.religion = religions[rand(0,religions.length-1)];
+    applyLegacyPerks();
     log(`${name} was born in ${country}.`);
     startShell();
   };
 }
+/* ===== ROUND 2: LEGACY PERKS, SHARE CARD, DAILY GOALS, NEW ACHIEVEMENTS ===== */
+const META_KEY = "ledger-meta-v1";
+let META = {points:0, perks:{}, lives:0, bestNW:0, oldest:0, daily:null, dailyStreak:0, lastDailyDone:""};
+try{ Object.assign(META, JSON.parse(localStorage.getItem(META_KEY)||"{}")); }catch(e){}
+function saveMeta(){ try{ localStorage.setItem(META_KEY, JSON.stringify(META)); }catch(e){} }
+
+const LEGACY_PERKS = [
+  {id:"headstart", icon:"💰", name:"Head Start",   desc:"+$2,000 starting money per level."},
+  {id:"genes",     icon:"🧬", name:"Strong Genes", desc:"+2 starting health per level."},
+  {id:"mind",      icon:"🧠", name:"Bright Mind",  desc:"+4 starting smarts per level."},
+  {id:"looks",     icon:"✨", name:"Good Looks",   desc:"+4 starting looks per level."},
+  {id:"lucky",     icon:"🍀", name:"Lucky Star",   desc:"+3 starting happiness per level."},
+];
+const PERK_MAX = 5;
+const perkCost = lvl => 4 + lvl*3;
+function applyLegacyPerks(){
+  const p = META.perks||{};
+  if(p.headstart) S.money += 2000*p.headstart;
+  if(p.genes)  S.stats.health    = clamp(S.stats.health    + 2*p.genes, 0, 100);
+  if(p.mind)   S.stats.smarts    = clamp(S.stats.smarts    + 4*p.mind, 0, 100);
+  if(p.looks)  S.stats.looks     = clamp(S.stats.looks     + 4*p.looks, 0, 100);
+  if(p.lucky)  S.stats.happiness = clamp(S.stats.happiness + 3*p.lucky, 0, 100);
+}
+function legacyPointsFor(st){
+  const nw = Math.max(0, netWorth());
+  const pts = Math.floor(nw/50000) + Math.floor(st.age/10) + Object.keys(st.achievements).length + ((st.generation||1)-1)*2;
+  return Math.max(1, Math.min(pts, 200));
+}
+function awardLegacy(){
+  if(S._legacyAwarded) return 0;
+  S._legacyAwarded = true;
+  const pts = legacyPointsFor(S);
+  META.points += pts; META.lives++;
+  META.bestNW = Math.max(META.bestNW||0, Math.round(netWorth()));
+  META.oldest = Math.max(META.oldest||0, S.age);
+  saveMeta();
+  return pts;
+}
+function openLegacyModal(){
+  const cards = LEGACY_PERKS.map(pk=>{
+    const lvl = (META.perks&&META.perks[pk.id])||0;
+    const maxed = lvl>=PERK_MAX, cost = perkCost(lvl);
+    return `<div class="card"><div class="card-row"><div><div class="card-title">${pk.icon} ${pk.name} · Lv ${lvl}/${PERK_MAX}</div><div class="card-sub">${pk.desc}</div></div></div>
+      <button class="btn ${maxed||META.points<cost?'secondary':'gold'}" data-perk="${pk.id}" style="margin-top:10px;" ${maxed?'disabled':''}>${maxed?'Maxed':`Upgrade (${cost} pts)`}</button></div>`;
+  }).join("");
+  openModal(`
+    <h3>🏛️ Legacy Perks</h3>
+    <div class="modal-sub">Every life earns Legacy Points (net worth, age, achievements, generations). Spend them on permanent perks that apply to every new life you start.</div>
+    <div class="card" style="border-color:var(--gold);"><div class="card-row"><div class="card-title">Legacy Points</div><div class="money">${META.points}</div></div>
+      <div class="card-sub">Lives lived: ${META.lives} · Best net worth: ${fmt(META.bestNW||0)} · Oldest: ${META.oldest||0}</div></div>
+    ${cards}
+    <button class="btn secondary" id="close-modal-btn" style="margin-top:6px;">Close</button>`);
+  document.querySelectorAll("#modal [data-perk]").forEach(b=> b.onclick = ()=>{
+    const id = b.dataset.perk, lvl = (META.perks[id]||0), cost = perkCost(lvl);
+    if(lvl>=PERK_MAX) return;
+    if(META.points<cost){ showToast("Not enough Legacy Points."); return; }
+    META.points -= cost; META.perks[id] = lvl+1; saveMeta();
+    showToast("Perk upgraded."); openLegacyModal();
+  });
+  document.getElementById("close-modal-btn").onclick = closeModal;
+}
+
+/* ---- share card ---- */
+function _wrapText(ctx, text, x, y, maxW, lh, maxLines){
+  const words = text.split(" "); let line = "", n = 0;
+  for(const w of words){
+    const test = line ? line+" "+w : w;
+    if(ctx.measureText(test).width > maxW && line){
+      ctx.fillText(line, x, y); y += lh; line = w; n++;
+      if(n>=maxLines-1){ break; }
+    } else line = test;
+  }
+  if(n<maxLines) ctx.fillText(line, x, y);
+  return y+lh;
+}
+function buildShareCanvas(){
+  const c = document.createElement("canvas"); c.width = 1080; c.height = 1350;
+  const ctx = c.getContext("2d");
+  const g = ctx.createLinearGradient(0,0,0,1350); g.addColorStop(0,"#15171c"); g.addColorStop(1,"#0a0b0e");
+  ctx.fillStyle = g; ctx.fillRect(0,0,1080,1350);
+  ctx.strokeStyle = "#b99a5b"; ctx.lineWidth = 4; ctx.strokeRect(36,36,1008,1278);
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#b99a5b"; ctx.font = "600 34px monospace"; ctx.fillText("THE LEDGER LIFE — FINAL ENTRY", 540, 120);
+  ctx.fillStyle = "#f2ead8"; ctx.font = "700 84px Georgia, serif";
+  let nm = S.name; while(ctx.measureText(nm).width>900 && nm.length>4) nm = nm.slice(0,-2);
+  ctx.fillText(nm, 540, 250);
+  ctx.fillStyle = "#9a9484"; ctx.font = "34px monospace";
+  ctx.fillText(`Died at ${S.age} · ${S.country}`, 540, 315);
+  if(S.deathCause){ ctx.font = "italic 32px Georgia, serif"; _wrapText(ctx, S.deathCause, 540, 375, 880, 42, 2); }
+  ctx.fillStyle = "#b99a5b"; ctx.font = "700 110px Georgia, serif";
+  ctx.fillText(fmt(netWorth()), 540, 540);
+  ctx.fillStyle = "#9a9484"; ctx.font = "30px monospace"; ctx.fillText("NET WORTH AT DEATH", 540, 590);
+  ctx.fillStyle = "#f2ead8"; ctx.font = "34px monospace";
+  ctx.fillText(`Generation ${S.generation||1}  ·  ${Object.keys(S.achievements).length} achievements`, 540, 670);
+  ctx.strokeStyle = "#2c2f37"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(120,720); ctx.lineTo(960,720); ctx.stroke();
+  ctx.textAlign = "left"; ctx.fillStyle = "#cfc7b2"; ctx.font = "30px Georgia, serif";
+  let y = 780;
+  const hl = S.log.filter(l=>/^🏆|married|born|graduat|promot|won|elected|built|inherit/i.test(l.text)).slice(0,6);
+  const lines = (hl.length>=4? hl : S.log.slice(0,6));
+  lines.slice(0,6).forEach(it=>{
+    ctx.fillStyle = "#b99a5b"; ctx.font = "26px monospace"; ctx.fillText("AGE "+it.age, 110, y);
+    ctx.fillStyle = "#cfc7b2"; ctx.font = "30px Georgia, serif";
+    y = _wrapText(ctx, it.text, 260, y, 700, 38, 2) + 22;
+  });
+  ctx.textAlign = "center"; ctx.fillStyle = "#b99a5b"; ctx.font = "32px monospace";
+  ctx.fillText("A Life, Kept.  ·  Play The Ledger Life", 540, 1275);
+  return c;
+}
+async function shareLife(){
+  try{
+    const c = buildShareCanvas();
+    const blob = await new Promise(r=>c.toBlob(r,"image/png"));
+    const file = new File([blob], "my-ledger-life.png", {type:"image/png"});
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({files:[file], title:"The Ledger Life", text:`I lived ${S.age} years and left ${fmt(netWorth())}. A Life, Kept.`});
+      return;
+    }
+    const url = c.toDataURL("image/png");
+    openModal(`<h3>📸 Your Life</h3><div class="modal-sub">Press and hold the image to save or share it.</div>
+      <img src="${url}" alt="Life card" style="width:100%; border-radius:4px;">
+      <button class="btn secondary" id="close-modal-btn" style="margin-top:10px;">Close</button>`);
+    document.getElementById("close-modal-btn").onclick = closeModal;
+  }catch(e){ if(!e || e.name!=="AbortError") showToast("Couldn't create the card."); }
+}
+
+/* ---- daily goals ---- */
+function _today(){ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function ensureDaily(){
+  const t = _today();
+  if(META.daily && META.daily.date===t) return;
+  let seed = 0; for(const ch of t) seed = (seed*31 + ch.charCodeAt(0))>>>0;
+  const rnd = ()=>{ seed = (seed*1664525 + 1013904223)>>>0; return seed/4294967296; };
+  const years = [10,15,25][Math.floor(rnd()*3)];
+  const nws = [50000,250000,1000000,5000000][Math.floor(rnd()*4)];
+  META.daily = {date:t, goals:[
+    {id:"years", text:`Age up ${years} years today`, target:years, progress:0, done:false},
+    {id:"nw",    text:`Reach a net worth of ${fmt(nws)}`, target:nws, progress:0, done:false},
+    {id:"ach",   text:`Unlock 2 achievements today`, target:2, progress:0, done:false},
+  ], achBase:null, bonusGiven:false};
+  saveMeta();
+}
+function dailyTick(){
+  if(!S || !S.alive) return;
+  ensureDaily();
+  const d = META.daily; let reward = 0;
+  const achNow = Object.keys(S.achievements).length;
+  if(d.achBase===null) d.achBase = Math.max(0, achNow - 0);
+  d.goals.forEach(g=>{
+    if(g.done) return;
+    if(g.id==="years") g.progress++;
+    else if(g.id==="nw") g.progress = Math.max(g.progress, Math.round(netWorth()));
+    else if(g.id==="ach") g.progress = Math.max(0, achNow - d.achBase);
+    if(g.progress>=g.target){ g.done = true; reward += 1; showToast("🎯 Daily goal complete: "+g.text); }
+  });
+  if(!d.bonusGiven && d.goals.every(g=>g.done)){
+    d.bonusGiven = true; reward += 2; showToast("🎉 All daily goals done! +2 bonus points");
+    if(META.lastDailyDone!==_today()){ META.dailyStreak = (META.lastDailyDone===_yesterday()) ? (META.dailyStreak||0)+1 : 1; META.lastDailyDone=_today(); }
+  }
+  if(reward){ META.points += reward; }
+  saveMeta();
+}
+function _yesterday(){ const d=new Date(Date.now()-86400000); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+function openDailyModal(){
+  ensureDaily();
+  const d = META.daily;
+  const fmtProg = g=> g.id==="nw" ? `${fmt(Math.min(g.progress,g.target))} / ${fmt(g.target)}` : `${Math.min(g.progress,g.target)} / ${g.target}`;
+  openModal(`
+    <h3>🎯 Daily Goals</h3>
+    <div class="modal-sub">Complete goals while you play. Each gives 1 Legacy Point, plus 2 bonus points for finishing all three. New goals every day.${META.dailyStreak?` · 🔥 Streak: ${META.dailyStreak} day${META.dailyStreak>1?'s':''}`:''}</div>
+    ${d.goals.map(g=>`<div class="card" style="${g.done?'border-color:var(--gold);':''}"><div class="card-row"><div class="card-title">${g.done?'✅':'🎯'} ${g.text}</div></div><div class="card-sub">${g.done?'Completed':fmtProg(g)}</div></div>`).join("")}
+    <div class="card"><div class="card-row"><div class="card-title">Legacy Points</div><div class="money">${META.points}</div></div></div>
+    <button class="btn gold" id="daily-legacy-btn" style="margin-top:6px;">🏛️ Spend Legacy Points</button>
+    <button class="btn secondary" id="close-modal-btn" style="margin-top:8px;">Close</button>`);
+  document.getElementById("daily-legacy-btn").onclick = openLegacyModal;
+  document.getElementById("close-modal-btn").onclick = closeModal;
+}
+/* ---- extra achievements ---- */
+[
+ {id:"centenarian", name:"Centenarian", desc:"Live to age 100.", cond:s=>s.age>=100},
+ {id:"globetrotter", name:"Globetrotter", desc:"Live in 5 different countries.", cond:s=>(s.countriesLived||[]).length>=5},
+ {id:"dynasty", name:"Dynasty", desc:"Reach the third generation of your family.", cond:s=>(s.generation||1)>=3},
+ {id:"great_dynasty", name:"A Century of Names", desc:"Reach the fifth generation.", cond:s=>(s.generation||1)>=5},
+ {id:"ten_million_cash", name:"Cash is King", desc:"Hold $1,000,000 in cash at once.", cond:s=>s.money>=1000000},
+ {id:"survivor", name:"Against the Odds", desc:"Reach 60 with health under 25.", cond:s=>s.age>=60 && s.stats.health<25},
+ {id:"scholar_elite", name:"Mastermind", desc:"Reach 100 smarts.", cond:s=>s.stats.smarts>=100},
+ {id:"beloved", name:"Joy Incarnate", desc:"Reach 100 happiness at age 30 or older.", cond:s=>s.age>=30 && s.stats.happiness>=100},
+ {id:"hermit_rich", name:"Quiet Fortune", desc:"Reach $1,000,000 net worth without ever being married.", cond:s=>netWorth()>=1000000 && !s._everMarried},
+ {id:"legacy_spender", name:"Building a Legacy", desc:"Buy a Legacy Perk.", cond:()=>Object.values(META.perks||{}).some(v=>v>0)},
+].forEach(a=>{ if(!ACHIEVEMENTS.some(x=>x.id===a.id)) ACHIEVEMENTS.push(a); });
+/* hook ageUp for daily goals */
+ageUp = (function(orig){ return function(){ const r = orig.apply(this, arguments); try{ checkAchievements(); dailyTick(); }catch(e){} return r; }; })(ageUp);
+
+/* ===== ROUND 3: INSURANCE, HEALTH / ASSET / FAMILY / LEGAL EVENTS ===== */
+function ensureR3(){
+  if(!S.ins) S.ins = {health:false, home:false, car:false};
+  if(!S.legal) S.legal = {sued:0, won:0, lost:0, filed:0};
+  if(S._lastEvt===undefined) S._lastEvt = null;
+}
+const INS_INFO = {
+  health:{icon:"🏥", name:"Health Insurance", price:1200, sub:"Covers 75% of hospital, doctor and dental emergencies."},
+  home:  {icon:"🏠", name:"Home Insurance",   price:900,  sub:"Covers 75% of property damage and repairs."},
+  car:   {icon:"🚗", name:"Car Insurance",    price:700,  sub:"Covers 75% of car repairs and accidents."},
+};
+function insActive(k){ ensureR3(); return !!S.ins[k]; }
+function eventCost(base, insKey){
+  const cost = (insKey && insActive(insKey)) ? Math.round(base*0.25) : base;
+  spendOrDebt(cost);
+  return cost;
+}
+function chargePremiums(){
+  ensureR3();
+  if(S.age<18) return;
+  [["health",true],["home",S.houses.length>0],["car",S.cars.length>0]].forEach(([k,needed])=>{
+    if(!S.ins[k]) return;
+    if(!needed){ S.ins[k]=false; return; }
+    const price = INS_INFO[k].price;
+    if(S.money + S.savings < price){ S.ins[k]=false; log(`You couldn't pay the ${INS_INFO[k].name.toLowerCase()} premium — your policy lapsed.`); return; }
+    spendOrDebt(price);
+  });
+}
+function openInsuranceModal(){
+  ensureR3();
+  const cards = Object.keys(INS_INFO).map(k=>{
+    const i = INS_INFO[k], on = S.ins[k];
+    const disabled = (!on && ((k==="home"&&!S.houses.length)||(k==="car"&&!S.cars.length)||S.age<18));
+    const why = k==="home"&&!S.houses.length ? " (you need a property)" : k==="car"&&!S.cars.length ? " (you need a car)" : S.age<18 ? " (adults only)" : "";
+    return `<div class="card"><div class="card-row"><div><div class="card-title">${i.icon} ${i.name}</div><div class="card-sub">${i.sub} ${fmt(i.price)}/year.${why}</div></div></div>
+      <button class="btn ${on?'secondary':'gold'}" data-ins="${k}" style="margin-top:10px;" ${disabled?'disabled':''}>${on?'Cancel policy':'Buy policy'}</button></div>`;
+  }).join("");
+  openModal(`
+    <h3>🛡️ Insurance & Legal</h3>
+    <div class="modal-sub">Life throws bills at you. Policies are charged every year and cut the cost of health, property and car emergencies by 75%.</div>
+    ${cards}
+    <div class="card"><div class="card-title">⚖️ Legal Record</div>
+      <div class="card-sub">Sued: ${S.legal.sued} · Cases won: ${S.legal.won} · Cases lost: ${S.legal.lost} · Lawsuits you filed: ${S.legal.filed}</div></div>
+    <button class="btn secondary" id="close-modal-btn" style="margin-top:6px;">Close</button>`);
+  document.querySelectorAll("#modal [data-ins]").forEach(b=> b.onclick = ()=>{
+    const k = b.dataset.ins; S.ins[k] = !S.ins[k];
+    log(S.ins[k] ? `You bought ${INS_INFO[k].name.toLowerCase()}.` : `You cancelled your ${INS_INFO[k].name.toLowerCase()}.`);
+    openInsuranceModal(); renderAll();
+  });
+  document.getElementById("close-modal-btn").onclick = closeModal;
+}
+
+function _randCar(){ return S.cars.length ? S.cars[rand(0,S.cars.length-1)] : null; }
+function _randHouse(){ return S.houses.length ? S.houses[rand(0,S.houses.length-1)] : null; }
+const LIFE_EVENTS = [
+ {id:"hospital", w:3, cond:()=>S.age>=18, title:"🏥 Hospitalised",
+  text:()=>"A sudden illness puts you in the emergency room. The doctors want you to stay a few days.",
+  options:[
+   {label:()=>`Private clinic (${fmt(insActive("health")?2000:8000)})`, run:()=>{ eventCost(8000,"health"); adjStat("health",15); return "You recovered in a private clinic. Expensive, but comfortable."; }},
+   {label:()=>"Public ward (free)", run:()=>{ adjStat("health",3); adjStat("happiness",-6); return "A crowded public ward and a long wait — but you made it through."; }},
+  ]},
+ {id:"chest", w:2, cond:()=>S.age>=45, title:"💓 Chest Pains",
+  text:()=>"You've felt a tightness in your chest for weeks. Time to decide whether to take it seriously.",
+  options:[
+   {label:()=>`Full check-up (${fmt(insActive("health")?375:1500)})`, run:()=>{ eventCost(1500,"health"); adjStat("health",8); return "The check-up caught a problem early. Your doctor is pleased."; }},
+   {label:()=>"Ignore it", run:()=>{ if(chance(0.25)){ adjStat("health",-25); S.illness = S.illness || {name:"Heart Disease", healthHit:9, serious:true}; return "It was a heart scare. You're now living with a heart condition."; } adjStat("happiness",1); return "It passed. This time."; }},
+  ]},
+ {id:"dental", w:3, cond:()=>S.age>=16, title:"🦷 Dental Emergency",
+  text:()=>"A cracked tooth and a lot of pain.",
+  options:[
+   {label:()=>`See a dentist (${fmt(insActive("health")?225:900)})`, run:()=>{ eventCost(900,"health"); adjStat("happiness",2); return "The dentist fixed it up."; }},
+   {label:()=>"Tough it out", run:()=>{ adjStat("happiness",-8); adjStat("looks",-3,true); return "You suffered for weeks, and the smile is not what it was."; }},
+  ]},
+ {id:"cartrouble", w:3, cond:()=>S.cars.length>0 && S.age>=18, title:"🚗 Car Trouble",
+  text:()=>{ const c=_randCar(); S._evtCar=c; return `Your ${c.name} breaks down on the way home.`; },
+  options:[
+   {label:()=>`Repair it (${fmt(insActive("car")?450:1800)})`, run:()=>{ eventCost(1800,"car"); return `You paid to get your ${S._evtCar.name} back on the road.`; }},
+   {label:()=>"Scrap it for parts", run:()=>{ const c=S._evtCar, i=S.cars.indexOf(c); if(i>=0){ S.money += Math.round((c.value||0)*0.3); S.cars.splice(i,1); } return `You scrapped your ${c.name} and got a little cash back.`; }},
+  ]},
+ {id:"housedamage", w:3, cond:()=>S.houses.length>0 && S.age>=18, title:"🏚️ Property Damage",
+  text:()=>{ const h=_randHouse(); S._evtHouse=h; return `A burst pipe floods part of your ${h.name}.`; },
+  options:[
+   {label:()=>`Full repair (${fmt(insActive("home")?1125:4500)})`, run:()=>{ eventCost(4500,"home"); const h=S._evtHouse; if(h.value!==undefined) h.value = Math.round(h.value*1.01); return `Your ${h.name} is good as new.`; }},
+   {label:()=>`Cheap patch (${fmt(800)})`, run:()=>{ spendOrDebt(800); const h=S._evtHouse; if(chance(0.3) && h.value!==undefined){ h.value=Math.round(h.value*0.95); return "The patch didn't hold — the damage lowered the value of your property."; } return "The cheap patch held up. For now."; }},
+  ]},
+ {id:"boom", w:2, cond:()=>S.houses.length>0, title:"📈 Housing Boom",
+  text:()=>"Property prices in your area jump sharply this year.",
+  options:[{label:()=>"Nice.", run:()=>{ S.houses.forEach(h=>{ if(h.value===undefined) h.value=h.cost; h.value=Math.round(h.value*1.08); }); return "The housing boom added about 8% to your property values."; }}]},
+ {id:"dip", w:2, cond:()=>S.houses.length>0, title:"📉 Housing Dip",
+  text:()=>"Property prices in your area slide this year.",
+  options:[{label:()=>"Ouch.", run:()=>{ S.houses.forEach(h=>{ if(h.value===undefined) h.value=h.cost; h.value=Math.round(h.value*0.94); }); return "The housing dip cost your properties about 6% of their value."; }}]},
+ {id:"reunion", w:3, cond:()=>S.age>=20, title:"👨‍👩‍👧 Family Reunion",
+  text:()=>"The whole family is getting together this summer.",
+  options:[
+   {label:()=>`Go (${fmt(600)})`, run:()=>{ spendOrDebt(600); adjStat("happiness",10); S.karma=(S.karma||0)+1; return "You reconnected with relatives you hadn't seen in years."; }},
+   {label:()=>"Skip it", run:()=>{ adjStat("happiness",-2); return "You stayed home. Your phone buzzed with photos all weekend."; }},
+  ]},
+ {id:"kidtrouble", w:3, cond:()=>S.children.some(c=>c.alive && c.age>=6 && c.age<18), title:"🎒 Trouble at School",
+  text:()=>{ const k=S.children.filter(c=>c.alive&&c.age>=6&&c.age<18); const c=k[rand(0,k.length-1)]; S._evtKid=c; return `${c.name}'s school calls — there's been some trouble.`; },
+  options:[
+   {label:()=>"Talk it through", run:()=>{ adjStat("happiness",3); S.karma=(S.karma||0)+1; return `You sat down with ${S._evtKid.name} and worked it out together.`; }},
+   {label:()=>`Hire a tutor (${fmt(1500)})`, run:()=>{ spendOrDebt(1500); adjStat("happiness",4); return `${S._evtKid.name} started doing much better in school.`; }},
+  ]},
+ {id:"relative", w:2, cond:()=>S.age>=25, title:"🤝 A Relative Needs Money",
+  text:()=>"A cousin asks to borrow $3,000 \"just until things turn around.\"",
+  options:[
+   {label:()=>`Lend ${fmt(3000)}`, run:()=>{ spendOrDebt(3000); S.karma=(S.karma||0)+2; if(chance(0.5)){ S.money+=3500; return "They paid you back with a little extra. Family comes through."; } return "You never saw that money again."; }},
+   {label:()=>"Say no", run:()=>{ S.karma=(S.karma||0)-1; adjStat("happiness",-2); return "You said no. Family dinners got a little awkward."; }},
+  ]},
+ {id:"windfall", w:1, cond:()=>S.age>=25, title:"💌 A Surprise Bequest",
+  text:()=>"A distant relative you barely knew has left you something in their will.",
+  options:[{label:()=>"Accept", run:()=>{ const a=rand(2000,20000); S.money+=a; return `You received ${fmt(a)} from a distant relative's will.`; }}]},
+ {id:"sued", w:3, cond:()=>S.age>=18 && netWorth()>20000, title:"⚖️ You're Being Sued",
+  text:()=>{ S._evtSettle = Math.min(50000, Math.max(2000, Math.round(netWorth()*0.08))); return `Someone is suing you over an old dispute. They'll accept a settlement of ${fmt(S._evtSettle)}.`; },
+  options:[
+   {label:()=>"Settle", run:()=>{ spendOrDebt(S._evtSettle); S.legal.sued++; return `You settled out of court for ${fmt(S._evtSettle)}.`; }},
+   {label:()=>`Fight it (${fmt(5000)} lawyer)`, run:()=>{ spendOrDebt(5000); S.legal.sued++; if(chance(0.55 + Math.min(0.15,(S.selfTaughtLaw||0)/200))){ S.legal.won++; adjStat("happiness",5); return "Your lawyer won the case. The claim was dismissed."; } S.legal.lost++; spendOrDebt(S._evtSettle*2); return `You lost in court and had to pay ${fmt(S._evtSettle*2)} on top of legal fees.`; }},
+   {label:()=>"Ignore it", run:()=>{ S.legal.sued++; if(chance(0.7)){ S.legal.lost++; spendOrDebt(S._evtSettle*3); return `A default judgment went against you: ${fmt(S._evtSettle*3)}.`; } return "The case quietly went away. You got lucky."; }},
+  ]},
+ {id:"slipfall", w:2, cond:()=>S.age>=18, title:"⚖️ Slip and Fall",
+  text:()=>"You slipped on a wet floor at a store and hurt your back. A lawyer says you may have a case.",
+  options:[
+   {label:()=>`File a lawsuit (${fmt(2000)})`, run:()=>{ spendOrDebt(2000); S.legal.filed++; if(chance(0.5)){ const a=rand(10000,60000); S.money+=a; S.legal.won++; return `You won your case and were awarded ${fmt(a)}.`; } S.legal.lost++; return "The case was dismissed and you lost the legal fees."; }},
+   {label:()=>"Let it go", run:()=>{ adjStat("health",-3); adjStat("happiness",1); return "You let it go and moved on, a little sore."; }},
+  ]},
+];
+function showLifeEvent(ev){
+  openModal(`<h3>${ev.title}</h3><div class="modal-sub">${ev.text()}</div>` +
+    ev.options.map((o,i)=>`<button class="btn ${i===0?'':'secondary'}" data-opt="${i}" style="margin-top:8px;">${o.label()}</button>`).join(""));
+  document.querySelectorAll("#modal [data-opt]").forEach(b=> b.onclick = ()=>{
+    const o = ev.options[Number(b.dataset.opt)];
+    let msg = ""; try{ msg = o.run(); }catch(e){}
+    if(msg) log(msg);
+    closeModal(); renderAll();
+    if(msg) showToast(msg);
+  });
+}
+function lifeEventsTick(){
+  if(!S || !S.alive || S.jailYears>0 || S.age<16) return;
+  ensureR3();
+  chargePremiums();
+  const modalOpen = document.getElementById("modal-backdrop").classList.contains("show");
+  const dead = document.getElementById("deathscreen").classList.contains("show");
+  if(modalOpen || dead) return;
+  const chancePerYear = PREFS.difficulty==="hard" ? 0.38 : PREFS.difficulty==="easy" ? 0.22 : 0.3;
+  if(!chance(chancePerYear)) return;
+  const pool = LIFE_EVENTS.filter(e=> e.id!==S._lastEvt && (()=>{ try{ return e.cond(); }catch(_){ return false; } })());
+  if(!pool.length) return;
+  const total = pool.reduce((a,e)=>a+e.w,0); let r = Math.random()*total, pick = pool[0];
+  for(const e of pool){ r -= e.w; if(r<=0){ pick = e; break; } }
+  S._lastEvt = pick.id;
+  showLifeEvent(pick);
+}
+ageUp = (function(orig){ return function(){ const r = orig.apply(this, arguments); try{ lifeEventsTick(); }catch(e){} return r; }; })(ageUp);
+RENDERERS.life = (function(orig){ return function(){
+  const w = orig.apply(this, arguments);
+  try{
+    if(w && w.appendChild && S.age>=16 && !S.homeless){
+      const c = el(`<div class="card"><div class="card-row"><div class="card-title">🛡️ Insurance & Legal</div><div class="card-sub">${["health","home","car"].filter(k=>insActive(k)).length}/3 policies</div></div><button class="btn secondary" id="ins-open-btn" style="margin-top:10px;">Manage</button></div>`);
+      c.querySelector("#ins-open-btn").onclick = openInsuranceModal;
+      w.appendChild(c);
+    }
+  }catch(e){}
+  return w;
+}; })(RENDERERS.life);
+
+/* ===== ROUND 4: FREE CAREER PACKS ===== */
+const EDU_RANK = {none:0, highschool:1, trade:2, college:3, university:4, graduate:5, medical:5};
+const eduAtLeast = (s,k)=> (EDU_RANK[s.eduTier]||0) >= EDU_RANK[k];
+const _pk = (n,x)=> Math.round(n*x);
+const PACK_PER_YEAR = 4;
+const CAREER_PACKS = [
+ {id:"tech", icon:"💻", name:"Tech & Startup", blurb:"Code, ship and raise money — from junior developer to CTO.",
+  req:()=> S.age>=18 && S.stats.smarts>=40 && eduAtLeast(S,"highschool"), reqText:"Smarts 40+ and a high school diploma",
+  ladder:[{t:"Junior Developer",s:45000,y:0,sm:0},{t:"Developer",s:70000,y:2,sm:45},{t:"Senior Engineer",s:105000,y:3,sm:55},{t:"Tech Lead",s:150000,y:4,sm:62},{t:"VP of Engineering",s:230000,y:5,sm:70},{t:"CTO",s:400000,y:6,sm:78}],
+  actions:[
+   {label:"Ship a side project", min:0, run:()=>{ if(chance(0.55)){ const a=rand(3000,30000); S.money+=a; adjStat("smarts",1); return {good:true,msg:`Your side project took off and earned ${fmt(a)}.`}; } adjStat("happiness",-4); return {good:false,msg:"Your side project flopped — a lot of late nights for nothing."}; }},
+   {label:"Pitch investors", min:2, run:()=>{ if(chance(0.35)){ const a=rand(50000,400000); S.money+=a; return {good:true,msg:`An investor wrote you a ${fmt(a)} cheque.`}; } return {good:false,msg:"The investors passed. Back to the whiteboard."}; }},
+  ],
+  capstone:{label:"Take your startup public (IPO)", min:4, once:true, run:()=>{ if(chance(0.7)){ const a=rand(1000000,8000000); S.money+=a; S.fameBonus=clamp((S.fameBonus||0)+8,-70,70); return {good:true,msg:`Your startup went public — your stake was worth ${fmt(a)}!`}; } spendOrDebt(100000); return {good:false,msg:"The IPO was pulled at the last minute. It cost you $100,000."}; }}},
+ {id:"medicine", icon:"🩺", name:"Hospital & Medicine", blurb:"Long shifts, life-and-death choices and the road to Chief of Surgery.",
+  req:()=> S.age>=21 && S.stats.smarts>=60 && eduAtLeast(S,"university"), reqText:"Smarts 60+ and a university degree",
+  ladder:[{t:"Medical Intern",s:60000,y:0,sm:0},{t:"Resident Physician",s:85000,y:2,sm:60},{t:"Attending Physician",s:150000,y:3,sm:65},{t:"Specialist",s:230000,y:4,sm:70},{t:"Department Head",s:320000,y:5,sm:75},{t:"Chief of Surgery",s:450000,y:6,sm:80}],
+  actions:[
+   {label:"Take an emergency shift", min:0, run:()=>{ adjStat("health",-4); if(chance(0.7)){ S.karma=(S.karma||0)+2; S.money+=2000; return {good:true,msg:"You saved a life during a brutal night shift."}; } return {good:false,msg:"You lost a patient. It stays with you."}; }},
+   {label:"Perform a complex surgery", min:2, run:()=>{ if(chance(0.85)){ S.money+=15000; S.fameBonus=clamp((S.fameBonus||0)+2,-70,70); return {good:true,msg:"The surgery was a success. Word spreads about your skill."}; } spendOrDebt(40000); return {good:false,msg:"Complications led to a malpractice claim. You paid $40,000."}; }},
+   {label:"Publish research", min:1, run:()=>{ adjStat("smarts",2); if(chance(0.45)){ const a=rand(20000,60000); S.money+=a; return {good:true,msg:`Your paper won a ${fmt(a)} research grant.`}; } return {good:false,msg:"Your paper was rejected. Peer review is harsh."}; }},
+  ],
+  capstone:{label:"Win a major medical prize", min:5, once:true, run:()=>{ S.fameBonus=clamp((S.fameBonus||0)+15,-70,70); S.money+=250000; return {good:true,msg:"You won a major medical prize and $250,000 for your work."}; }}},
+ {id:"law", icon:"⚖️", name:"Courtroom & Law", blurb:"Argue cases, win juries and one day sit on the bench.",
+  req:()=> S.age>=22 && S.stats.smarts>=55 && eduAtLeast(S,"university"), reqText:"Smarts 55+ and a university degree",
+  ladder:[{t:"Law Clerk",s:50000,y:0,sm:0},{t:"Associate Attorney",s:85000,y:2,sm:55},{t:"Senior Associate",s:130000,y:3,sm:62},{t:"Partner",s:250000,y:4,sm:70},{t:"Managing Partner",s:400000,y:5,sm:76},{t:"Judge",s:300000,y:6,sm:80}],
+  actions:[
+   {label:"Take a high-profile case", min:1, run:()=>{ if(chance(0.5)){ const a=rand(30000,150000); S.money+=a; S.fameBonus=clamp((S.fameBonus||0)+3,-70,70); return {good:true,msg:`You won a headline case and earned ${fmt(a)}.`}; } spendOrDebt(10000); return {good:false,msg:"You lost the case, and the firm docked your bonus."}; }},
+   {label:"Take a pro bono case", min:0, run:()=>{ S.karma=(S.karma||0)+3; adjStat("happiness",4); return {good:true,msg:"You took a case for free and changed someone's life."}; }},
+   {label:"Study case law", min:0, run:()=>{ adjStat("smarts",2); S.selfTaughtLaw=(S.selfTaughtLaw||0)+4; return {good:true,msg:"You buried yourself in case law and came out sharper."}; }},
+  ],
+  capstone:{label:"Argue before the Supreme Court", min:5, once:true, run:()=>{ if(chance(0.65)){ S.fameBonus=clamp((S.fameBonus||0)+15,-70,70); S.money+=200000; return {good:true,msg:"Your argument won the Supreme Court. Your name is in the history books."}; } return {good:false,msg:"The Court ruled against you. A historic loss."}; }}},
+ {id:"military", icon:"🎖️", name:"Military & Intelligence", blurb:"Serve, deploy and rise through the ranks — or go undercover.",
+  req:()=> S.age>=18 && S.age<=45 && S.stats.health>=60 && eduAtLeast(S,"highschool") && !S._everJailed, reqText:"Age 18–45, health 60+, high school diploma, clean record",
+  ladder:[{t:"Recruit",s:24000,y:0,sm:0},{t:"Corporal",s:32000,y:2,sm:0},{t:"Sergeant",s:44000,y:3,sm:30},{t:"Lieutenant",s:65000,y:4,sm:40},{t:"Captain",s:90000,y:5,sm:50},{t:"General",s:180000,y:7,sm:60}],
+  actions:[
+   {label:"Special training", min:0, run:()=>{ adjStat("health",3); adjStat("smarts",1); return {good:true,msg:"Hard training left you stronger and sharper."}; }},
+   {label:"Deploy overseas", min:1, run:()=>{ adjStat("health",-12); adjStat("happiness",-8); S.money+=15000; if(chance(0.04)){ S.alive=false; S.deathCause="Killed in action overseas"; return {good:false,msg:"You were killed in action.",die:true}; } return {good:true,msg:"You came home from deployment with a bonus and a few scars."}; }},
+   {label:"Covert mission", min:3, run:()=>{ if(chance(0.6)){ S.money+=40000; return {good:true,msg:"Your covert mission succeeded. Nobody will ever know."}; } adjStat("health",-15); return {good:false,msg:"The mission went wrong and you barely made it out."}; }},
+  ],
+  capstone:{label:"Receive a medal of honor", min:5, once:true, run:()=>{ S.fameBonus=clamp((S.fameBonus||0)+12,-70,70); S.money+=100000; S.karma=(S.karma||0)+5; return {good:true,msg:"You were awarded the highest military honor."}; }}},
+ {id:"chef", icon:"🍳", name:"Kitchen & Restaurants", blurb:"From dishwasher to celebrity chef and restaurant empire.",
+  req:()=> S.age>=16, reqText:"Age 16+",
+  ladder:[{t:"Line Cook",s:22000,y:0,sm:0},{t:"Sous Chef",s:38000,y:2,sm:0},{t:"Head Chef",s:62000,y:3,sm:30},{t:"Executive Chef",s:95000,y:4,sm:40},{t:"Restaurateur",s:160000,y:5,sm:50},{t:"Celebrity Chef",s:300000,y:6,sm:55}],
+  actions:[
+   {label:"Create a signature dish", min:1, run:()=>{ if(chance(0.5)){ S.fameBonus=clamp((S.fameBonus||0)+3,-70,70); S.money+=5000; return {good:true,msg:"Your signature dish became the talk of the town."}; } return {good:false,msg:"Critics weren't impressed with the new dish."}; }},
+   {label:"Open a pop-up (cost $8,000)", min:2, run:()=>{ spendOrDebt(8000); if(chance(0.6)){ const a=rand(15000,45000); S.money+=a; return {good:true,msg:`Your pop-up sold out and earned ${fmt(a)}.`}; } return {good:false,msg:"The pop-up barely broke even."}; }},
+   {label:"Cook for charity", min:0, run:()=>{ S.karma=(S.karma||0)+3; adjStat("happiness",3); return {good:true,msg:"You cooked a charity dinner and everyone left full."}; }},
+  ],
+  capstone:{label:"Earn a Michelin star", min:4, once:true, run:()=>{ if(chance(0.4)){ S.fameBonus=clamp((S.fameBonus||0)+15,-70,70); S.job.salary=Math.round(S.job.salary*1.3); return {good:true,msg:"You earned a Michelin star! Reservations are booked years ahead."}; } return {good:false,msg:"The inspectors left without a star this time."}; }}},
+ {id:"royal", icon:"👑", name:"Royal Court", blurb:"Intrigue, titles and influence among the aristocracy.",
+  req:()=> S.age>=18 && ((S.fame||0)>=20 || netWorth()>=500000 || (S.relationship.status==="married" && S.relationship.royal)), reqText:"Fame 20+, net worth $500,000+, or a royal marriage",
+  ladder:[{t:"Royal Page",s:20000,y:0,sm:0},{t:"Courtier",s:45000,y:2,sm:0},{t:"Lord/Lady-in-Waiting",s:80000,y:3,sm:30},{t:"Royal Ambassador",s:130000,y:4,sm:45},{t:"Royal Advisor",s:200000,y:5,sm:55},{t:"Duke/Duchess",s:350000,y:6,sm:60}],
+  actions:[
+   {label:"Attend a royal gala (cost $2,000)", min:0, run:()=>{ spendOrDebt(2000); adjStat("happiness",6); S.fameBonus=clamp((S.fameBonus||0)+1,-70,70); return {good:true,msg:"You shone at the royal gala."}; }},
+   {label:"Broker an alliance", min:2, run:()=>{ if(chance(0.4)){ S.money+=60000; return {good:true,msg:"You brokered an alliance and were handsomely rewarded."}; } return {good:false,msg:"The talks collapsed and you lost favour at court."}; }},
+   {label:"Spread a rumour", min:1, run:()=>{ if(chance(0.5)){ S.money+=12000; S.karma=(S.karma||0)-2; return {good:true,msg:"The rumour worked in your favour — though it cost your conscience."}; } S.fameBonus=clamp((S.fameBonus||0)-3,-70,70); return {good:false,msg:"The rumour was traced to you. Scandal."}; }},
+  ],
+  capstone:{label:"Be granted a noble title", min:5, once:true, run:()=>{ S.fameBonus=clamp((S.fameBonus||0)+12,-70,70); S.money+=150000; return {good:true,msg:"The crown granted you a noble title and an estate."}; }}},
+ {id:"aviation", icon:"✈️", name:"Aviation", blurb:"Cadet to airline executive — long-haul routes and emergencies at 35,000 feet.",
+  req:()=> S.age>=21 && S.stats.health>=50 && eduAtLeast(S,"college"), reqText:"Age 21+, health 50+, college degree",
+  ladder:[{t:"Flight Cadet",s:40000,y:0,sm:0},{t:"First Officer",s:85000,y:2,sm:40},{t:"Captain",s:140000,y:3,sm:48},{t:"Senior Captain",s:190000,y:4,sm:55},{t:"Chief Pilot",s:250000,y:5,sm:60},{t:"Airline Executive",s:340000,y:6,sm:68}],
+  actions:[
+   {label:"Fly a long-haul route", min:0, run:()=>{ S.money+=6000; adjStat("happiness",2); if(chance(0.1)){ if(chance(0.9)){ S.fameBonus=clamp((S.fameBonus||0)+8,-70,70); return {good:true,msg:"An engine failed mid-flight and you landed safely. The papers called you a hero."}; } adjStat("health",-20); return {good:false,msg:"A hard emergency landing left you injured."}; } return {good:true,msg:"A smooth long-haul flight — a nice bonus."}; }},
+   {label:"Flight simulator training", min:0, run:()=>{ adjStat("smarts",2); return {good:true,msg:"Hours in the simulator sharpened your skills."}; }},
+   {label:"Lead a safety audit", min:2, run:()=>{ if(chance(0.6)){ S.money+=20000; return {good:true,msg:"Your audit prevented a serious problem and earned a bonus."}; } return {good:false,msg:"The audit found nothing — and nobody cared."}; }},
+  ],
+  capstone:{label:"Launch your own airline", min:5, once:true, run:()=>{ if(chance(0.6)){ S.money+=1500000; return {good:true,msg:"Your airline took off and paid out $1,500,000 in the first year."}; } spendOrDebt(200000); return {good:false,msg:"The airline ran into trouble and cost you $200,000."}; }}},
+ {id:"creator", icon:"🎬", name:"Creator & Media", blurb:"Build an audience and grow into a media empire.",
+  req:()=> S.age>=16 && (S.social.followers||0)>=5000, reqText:"At least 5,000 followers",
+  ladder:[{t:"Content Creator",s:18000,y:0,sm:0},{t:"Channel Host",s:40000,y:2,sm:0},{t:"Showrunner",s:80000,y:3,sm:30},{t:"Media Mogul",s:150000,y:4,sm:40},{t:"Network Owner",s:280000,y:5,sm:50},{t:"Media Empire Owner",s:500000,y:6,sm:55}],
+  actions:[
+   {label:"Try to go viral", min:0, run:()=>{ if(chance(0.4)){ const f=rand(5000,80000); S.social.followers+=f; return {good:true,msg:`Your video went viral — +${f.toLocaleString()} followers.`}; } return {good:false,msg:"The video got a few likes and disappeared."}; }},
+   {label:"Land a brand deal", min:1, run:()=>{ const a=Math.max(1000, Math.round((S.social.followers||0)*0.05)); S.money+=a; return {good:true,msg:`A brand paid you ${fmt(a)} for a sponsored post.`}; }},
+   {label:"Launch a new show (cost $10,000)", min:2, run:()=>{ spendOrDebt(10000); if(chance(0.5)){ const a=rand(30000,120000); S.money+=a; S.social.followers+=rand(2000,30000); return {good:true,msg:`Your new show was a hit and earned ${fmt(a)}.`}; } return {good:false,msg:"The new show was cancelled after one season."}; }},
+  ],
+  capstone:{label:"Sell your media company", min:5, once:true, run:()=>{ const a=rand(2000000,10000000); S.money+=a; return {good:true,msg:`You sold your media company for ${fmt(a)}.`}; }}},
+];
+function _packById(id){ return CAREER_PACKS.find(p=>p.id===id); }
+function startPack(p){
+  const lv = p.ladder[0];
+  S.job = {title:lv.t, salary:lv.s, track:"pack", pack:p.id, level:0, ptenure:0, pActs:0, rep:0};
+  S.packsWorked = S.packsWorked || [];
+  if(!S.packsWorked.includes(p.id)) S.packsWorked.push(p.id);
+  log(`You started a new career in ${p.name}: ${lv.t}.`);
+  renderAll();
+}
+function renderPackCard(){
+  const j = S.job, p = _packById(j.pack);
+  if(!p) return el(`<div class="card"><div class="card-title">${j.title}</div></div>`);
+  const next = p.ladder[j.level+1];
+  S.packTop = S.packTop || {};
+  const wrap = el(`<div></div>`);
+  const nextText = next ? `Next: ${next.t} — needs ${next.y} year${next.y===1?"":"s"} in this role (you: ${j.ptenure}) and smarts ${next.sm}+` : "You've reached the top.";
+  const card = el(`<div class="card" style="border-color:var(--gold);"><div class="card-title">${p.icon} ${j.title} <span class="tag">${p.name}</span></div>
+    <div class="card-sub">Net ~${fmt(netOf(j.salary))}/age · years in this role ${j.ptenure} · reputation ${j.rep} · actions ${j.pActs}/${PACK_PER_YEAR} this year</div>
+    <div class="card-sub" style="margin-top:4px;">${nextText}</div></div>`);
+  const row = el(`<div class="btn-row" style="margin-top:8px; flex-wrap:wrap;"></div>`);
+  const addBtn = (label, disabled, fn, cls)=>{
+    const b = el(`<button class="small-btn ${cls||''}" ${disabled?'disabled':''}>${label}</button>`);
+    b.onclick = fn; row.appendChild(b);
+  };
+  const doAction = (a, isCap)=>{
+    if(j.pActs>=PACK_PER_YEAR){ showToast("You've done enough this year — age up first."); return; }
+    j.pActs++;
+    let res; try{ res = a.run(); }catch(e){ res = {good:false,msg:"Something went wrong."}; }
+    if(res.good) j.rep++;
+    if(isCap && res.good){ j.capDone = (j.capDone||0)+1; }
+    log(res.msg); showToast(res.msg);
+    if(res.die){ showDeath(); return; }
+    renderAll();
+  };
+  addBtn("Work overtime", j.pActs>=PACK_PER_YEAR, ()=>{
+    if(j.pActs>=PACK_PER_YEAR) return;
+    j.pActs++; adjStat("happiness",-3); const b=Math.round(j.salary*(rand(2,6)/100)); S.money+=b; j.rep++;
+    log(`You put in overtime as ${j.title} and earned a ${fmt(b)} bonus.`); renderAll();
+  });
+  p.actions.forEach(a=> addBtn(a.label, j.level<a.min || j.pActs>=PACK_PER_YEAR, ()=>doAction(a,false)));
+  const cap = p.capstone;
+  if(cap && j.level>=cap.min && !(cap.once && j.capDone)) addBtn("★ "+cap.label, j.pActs>=PACK_PER_YEAR, ()=>doAction(cap,true), "gold");
+  if(next){
+    const eligible = j.ptenure>=next.y && S.stats.smarts>=next.sm;
+    addBtn(`Request promotion → ${next.t}`, !eligible, ()=>{
+      const chancePromo = clamp(0.45 + j.rep/20 + S.stats.smarts/400, 0.2, 0.92);
+      if(chance(chancePromo)){
+        j.level++; j.title = next.t; j.salary = next.s; j.ptenure = 0;
+        log(`You were promoted to ${next.t}! New salary: ${fmt(next.s)}.`);
+        showToast(`Promoted to ${next.t}!`);
+        if(j.level===p.ladder.length-1){ S.packTop[p.id]=true; log(`You reached the top of ${p.name}.`); }
+      } else { adjStat("happiness",-3); log("Your promotion request was turned down. Keep proving yourself."); }
+      renderAll();
+    }, eligible?"gold":"");
+  }
+  addBtn("Quit", false, ()=>{ log(`You left your career in ${p.name}.`); S.job=null; renderAll(); }, "red");
+  card.appendChild(row);
+  wrap.appendChild(card);
+  return wrap;
+}
+renderJobCard = (function(orig){ return function(){ if(S.job && S.job.track==="pack") return renderPackCard(); return orig.apply(this, arguments); }; })(renderJobCard);
+RENDERERS.career = (function(orig){ return function(){
+  const w = orig.apply(this, arguments);
+  try{
+    if(w && w.appendChild && S.age>=16 && !S.job && !S.inSchool){
+      w.appendChild(el(`<div class="section-title" style="margin-top:14px;">Career Packs <span class="tag">Free</span></div>`));
+      w.appendChild(el(`<div class="empty-note">Special career paths with their own ladders, risks and rewards. Pick one to start at the bottom and work your way up.</div>`));
+      CAREER_PACKS.forEach(p=>{
+        let ok=false; try{ ok = !!p.req(); }catch(e){}
+        const top = (S.packTop||{})[p.id] ? ' 🏅' : '';
+        const c = el(`<div class="card"><div class="card-row"><div><div class="card-title">${p.icon} ${p.name}${top}</div><div class="card-sub">${p.blurb}</div><div class="card-sub" style="margin-top:4px;">Starts at ${p.ladder[0].t} · ${fmt(netOf(p.ladder[0].s))}/age · ${ok?'Requirements met':'Requires: '+p.reqText}</div></div>
+          <button class="small-btn ${ok?'gold':''}" ${ok?'':'disabled'}>Start</button></div></div>`);
+        c.querySelector("button").onclick = ()=>startPack(p);
+        w.appendChild(c);
+      });
+    }
+  }catch(e){}
+  return w;
+}; })(RENDERERS.career);
+/* yearly tick + achievements */
+ageUp = (function(orig){ return function(){
+  const wasPack = S && S.job && S.job.track==="pack";
+  const r = orig.apply(this, arguments);
+  try{ if(wasPack && S.alive && S.job && S.job.track==="pack"){ S.job.ptenure=(S.job.ptenure||0)+1; S.job.pActs=0; } }catch(e){}
+  return r;
+}; })(ageUp);
+CAREER_PACKS.forEach(p=>{
+  ACHIEVEMENTS.push({id:"packtop_"+p.id, name:`Top of the Ladder: ${p.name}`, desc:`Reach the highest rank in ${p.name}.`, cond:s=>!!(s.packTop && s.packTop[p.id])});
+});
+ACHIEVEMENTS.push({id:"jack_of_trades", name:"Jack of All Trades", desc:"Work in 3 different Career Packs.", cond:s=>(s.packsWorked||[]).length>=3});
+
 init();
 if("serviceWorker" in navigator){
   window.addEventListener("load", ()=>{
