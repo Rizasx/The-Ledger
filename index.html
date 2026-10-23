@@ -952,7 +952,7 @@ async function tryLoad(){
 let audioCtx = null;
 /* ===== PREFERENCES + MUSIC ENGINE (round 1) ===== */
 const PREFS_KEY = "ledger-prefs-v1";
-const PREFS_DEFAULT = {musicOn:true, musicVol:0.5, sfxVol:1, track:"noir", difficulty:"normal", textScale:1, contrast:false, vibration:true, autosave:true};
+const PREFS_DEFAULT = {musicOn:true, musicVol:0.5, sfxVol:1, track:"noir", difficulty:"normal", lang:"en", textScale:1, contrast:false, vibration:true, autosave:true};
 let PREFS = Object.assign({}, PREFS_DEFAULT);
 try{ Object.assign(PREFS, JSON.parse(localStorage.getItem(PREFS_KEY)||"{}")); }catch(e){}
 function savePrefs(){ try{ localStorage.setItem(PREFS_KEY, JSON.stringify(PREFS)); }catch(e){} }
@@ -993,8 +993,12 @@ function _musicBuild(){
   MUSIC.master.connect(ctx.destination);
   return true;
 }
+function curTrack(){
+  if(PREFS.track==="auto"){ const a = (typeof S!=="undefined" && S) ? S.age : 30; return MUSIC_TRACKS[a<18?"golden":a<60?"noir":"midnight"]; }
+  return MUSIC_TRACKS[PREFS.track] || MUSIC_TRACKS.noir;
+}
 function _musicStep(step, t){
-  const tr = MUSIC_TRACKS[PREFS.track] || MUSIC_TRACKS.noir;
+  const tr = curTrack();
   const sd = 60/tr.bpm/2;
   const bar = Math.floor(step/16) % tr.chords.length;
   const pos = step % 16;
@@ -1012,7 +1016,7 @@ function _musicStep(step, t){
 }
 function _musicTick(){
   const ctx = audioCtx; if(!ctx || !MUSIC.running) return;
-  const tr = MUSIC_TRACKS[PREFS.track] || MUSIC_TRACKS.noir;
+  const tr = curTrack();
   const sd = 60/tr.bpm/2;
   while(MUSIC.next < ctx.currentTime + 0.6){
     _musicStep(MUSIC.step, MUSIC.next);
@@ -1430,7 +1434,7 @@ function openAppearanceModal(){
 function openAchievementsModal(){
   const unlocked = Object.keys(S.achievements).length;
   const body = `<h3>🏆 Achievements</h3><div class="modal-sub">${unlocked}/${ACHIEVEMENTS.length} unlocked</div>
-  ${ACHIEVEMENTS.map(a=>`<div class="card" style="opacity:${S.achievements[a.id]?1:0.45}"><div class="card-title">${S.achievements[a.id]?'🏆':'🔒'} ${a.name}</div><div class="card-sub">${a.desc}</div></div>`).join("")}
+  ${ACHIEVEMENTS.map(a=>`<div class="card" style="opacity:${S.achievements[a.id]?1:0.45}"><div class="card-title">${(a.hidden&&!S.achievements[a.id])?'🔒 ???':(S.achievements[a.id]?'🏆':'🔒')+' '+a.name}</div><div class="card-sub">${(a.hidden&&!S.achievements[a.id])?'A hidden achievement — keep playing to discover it.':a.desc}</div></div>`).join("")}
   <button class="btn secondary" id="close-modal-btn" style="margin-top:6px;">Close</button>`;
   openModal(body);
   document.getElementById("close-modal-btn").onclick = closeModal;
@@ -1621,7 +1625,7 @@ function openSettingsModal(){
 const TEXT_SCALES = [{v:0.9,n:"Small"},{v:1,n:"Normal"},{v:1.12,n:"Large"},{v:1.25,n:"Extra large"}];
 function _cycle(list, cur){ const i = list.indexOf(cur); return list[(i+1)%list.length]; }
 function openGameSettingsModal(){
-  const trackKeys = Object.keys(MUSIC_TRACKS);
+  const trackKeys = [...Object.keys(MUSIC_TRACKS), "auto"];
   const scaleName = (TEXT_SCALES.find(x=>x.v===PREFS.textScale)||TEXT_SCALES[1]).n;
   const diffLabel = {easy:"Easy (health losses −30%)", normal:"Normal", hard:"Hard (health losses +35%)"}[PREFS.difficulty];
   const row = (title, sub, id, label, cls)=>`<div class="card"><div class="card-row"><div class="card-title">${title}</div><div class="card-sub">${sub}</div></div>
@@ -1629,7 +1633,8 @@ function openGameSettingsModal(){
   const body = `
     <h3>🎛️ Audio & Game</h3>
     ${row("🎵 Music", PREFS.musicOn?"On":"Off", "gs-music", PREFS.musicOn?"Turn Off":"Turn On")}
-    ${row("🎼 Track", MUSIC_TRACKS[PREFS.track].name, "gs-track", "Next Track")}
+    ${row("🎼 Track", PREFS.track==="auto"?"Auto (changes with your age)":MUSIC_TRACKS[PREFS.track].name, "gs-track", "Next Track")}
+    ${row("🌐 Language", PREFS.lang==="no"?"Norsk (delvis oversatt)":"English", "gs-lang", PREFS.lang==="no"?"Switch to English":"Bytt til norsk")}
     <div class="card"><div class="card-row"><div class="card-title">🔊 Music Volume</div><div class="card-sub" id="gs-mvol-l">${Math.round(PREFS.musicVol*100)}%</div></div>
       <input type="range" id="gs-mvol" min="0" max="100" value="${Math.round(PREFS.musicVol*100)}" style="width:100%; margin-top:10px;"></div>
     <div class="card"><div class="card-row"><div class="card-title">🔔 Effects Volume</div><div class="card-sub" id="gs-svol-l">${Math.round(PREFS.sfxVol*100)}%</div></div>
@@ -1656,6 +1661,7 @@ function openGameSettingsModal(){
   $("gs-svol").onchange = ()=>{ savePrefs(); playClickSound(); };
   $("gs-diff").onclick = ()=>{ PREFS.difficulty=_cycle(["easy","normal","hard"], PREFS.difficulty); changed(); };
   $("gs-text").onclick = ()=>{ const vs=TEXT_SCALES.map(x=>x.v); PREFS.textScale=_cycle(vs, PREFS.textScale); changed(); };
+  $("gs-lang").onclick = ()=>{ PREFS.lang = PREFS.lang==="no"?"en":"no"; savePrefs(); applyLanguage(); openGameSettingsModal(); };
   $("gs-contrast").onclick = ()=>{ PREFS.contrast=!PREFS.contrast; changed(); };
   $("gs-vib").onclick = ()=>{ PREFS.vibration=!PREFS.vibration; changed(); };
   $("gs-auto").onclick = ()=>{ PREFS.autosave=!PREFS.autosave; changed(); };
@@ -7382,7 +7388,7 @@ function showDeath(){
   d.innerHTML = `
     <div class="intro-eyebrow">THE LEDGER LIFE — FINAL ENTRY</div>
     <h1>${S.name}</h1>
-    <div style="font-family:var(--mono); color:var(--muted); margin-bottom:20px;">Died at age ${S.age} in ${S.country}${S.deathCause?`<br>Cause: ${S.deathCause}`:''}<br>Net worth at death: ${fmt(netWorth())}<br>Generation ${S.generation||1} · ${Object.keys(S.achievements).length} achievements</div>
+    <div style="font-family:var(--mono); color:var(--muted); margin-bottom:20px;">Died at age ${S.age} in ${S.country}${S.deathCause?`<br>Cause: ${S.deathCause}`:''}<br>Net worth at death: ${fmt(netWorth())}<br>Generation ${S.generation||1} · ${Object.keys(S.achievements).length} achievements<br>Ending: ${endingFor(S).name} — ${endingFor(S).desc}</div>
     <div style="flex:1; overflow-y:auto; border-top:1px solid var(--border); padding-top:14px;">
       ${S.log.slice(0,40).map(item=>`<div class="feed-item"><span class="age-mark">AGE ${item.age}</span>${item.text}</div>`).join("")}
     </div>
@@ -7686,7 +7692,7 @@ async function init(){
   if(versionLabel) versionLabel.textContent = `Created by Aethelgard · v${APP_VERSION}`;
   initGoogleSignIn();
   S = hasSave ? migrateState(loaded) : freshState("", "United States");
-  applyPrefs(); musicArm();
+  applyPrefs(); musicArm(); applyLanguage();
   const continueBtn = document.getElementById("title-continue-btn");
   if(hasSave) continueBtn.style.display = "";
   continueBtn.onclick = ()=>{
@@ -7774,6 +7780,13 @@ function awardLegacy(){
   S._legacyAwarded = true;
   const pts = legacyPointsFor(S);
   META.points += pts; META.lives++;
+  try{
+    const en = endingFor(S);
+    META.pastLives = META.pastLives||[]; META.endingsSeen = META.endingsSeen||{};
+    META.pastLives.push({name:S.name, age:S.age, country:S.country, nw:Math.round(netWorth()), gen:S.generation||1, cause:S.deathCause||"", ending:en.name});
+    if(META.pastLives.length>40) META.pastLives.shift();
+    META.endingsSeen[en.id]=true;
+  }catch(e){}
   META.bestNW = Math.max(META.bestNW||0, Math.round(netWorth()));
   META.oldest = Math.max(META.oldest||0, S.age);
   saveMeta();
@@ -8048,7 +8061,7 @@ const LIFE_EVENTS = [
  {id:"sued", w:3, cond:()=>S.age>=18 && netWorth()>20000, title:"⚖️ You're Being Sued",
   text:()=>{ S._evtSettle = Math.min(50000, Math.max(2000, Math.round(netWorth()*0.08))); return `Someone is suing you over an old dispute. They'll accept a settlement of ${fmt(S._evtSettle)}.`; },
   options:[
-   {label:()=>"Settle", run:()=>{ spendOrDebt(S._evtSettle); S.legal.sued++; return `You settled out of court for ${fmt(S._evtSettle)}.`; }},
+   {label:()=>`Settle (${fmt(S._evtSettle||0)})`, run:()=>{ spendOrDebt(S._evtSettle); S.legal.sued++; return `You settled out of court for ${fmt(S._evtSettle)}.`; }},
    {label:()=>`Fight it (${fmt(5000)} lawyer)`, run:()=>{ spendOrDebt(5000); S.legal.sued++; if(chance(0.55 + Math.min(0.15,(S.selfTaughtLaw||0)/200))){ S.legal.won++; adjStat("happiness",5); return "Your lawyer won the case. The claim was dismissed."; } S.legal.lost++; spendOrDebt(S._evtSettle*2); return `You lost in court and had to pay ${fmt(S._evtSettle*2)} on top of legal fees.`; }},
    {label:()=>"Ignore it", run:()=>{ S.legal.sued++; if(chance(0.7)){ S.legal.lost++; spendOrDebt(S._evtSettle*3); return `A default judgment went against you: ${fmt(S._evtSettle*3)}.`; } return "The case quietly went away. You got lucky."; }},
   ]},
@@ -8059,9 +8072,25 @@ const LIFE_EVENTS = [
    {label:()=>"Let it go", run:()=>{ adjStat("health",-3); adjStat("happiness",1); return "You let it go and moved on, a little sore."; }},
   ]},
 ];
+function _optCost(o){ try{ const m = String(o.label()).match(/\$([\d,]+)/); return m ? parseInt(m[1].replace(/,/g,""),10) : 0; }catch(e){ return 0; } }
 function showLifeEvent(ev){
-  openModal(`<h3>${ev.title}</h3><div class="modal-sub">${ev.text()}</div>` +
-    ev.options.map((o,i)=>`<button class="btn ${i===0?'':'secondary'}" data-opt="${i}" style="margin-top:8px;">${o.label()}</button>`).join(""));
+  const evText = ev.text();
+  const funds = (S.money||0) + (S.savings||0);
+  const info = ev.options.map(o=>({o, cost:_optCost(o)}));
+  info.forEach(x=>{ x.ok = x.cost<=funds; });
+  const affordable = info.filter(x=>x.ok);
+  // If you can't afford the paid choices, the free one is picked for you.
+  if(affordable.length===1 && info.length>1){
+    const only = affordable[0];
+    let msg = ""; try{ msg = only.o.run(); }catch(e){}
+    const skipped = info.filter(x=>!x.ok).map(x=>x.o.label().replace(/\s*\(.*$/,""));
+    const note = `${ev.title.replace(/^[^A-Za-z]+/,"")}: you couldn't afford ${skipped.join(" / ")}, so the free option was chosen.`;
+    log(note); if(msg) log(msg);
+    renderAll(); showToast(msg || note);
+    return;
+  }
+  openModal(`<h3>${ev.title}</h3><div class="modal-sub">${evText}</div>` +
+    info.map((x,i)=>`<button class="btn ${i===0?'':'secondary'}" data-opt="${i}" style="margin-top:8px;" ${x.ok?'':'disabled'}>${x.o.label()}${x.ok?'':" — can't afford"}</button>`).join(""));
   document.querySelectorAll("#modal [data-opt]").forEach(b=> b.onclick = ()=>{
     const o = ev.options[Number(b.dataset.opt)];
     let msg = ""; try{ msg = o.run(); }catch(e){}
@@ -8267,6 +8296,959 @@ CAREER_PACKS.forEach(p=>{
   ACHIEVEMENTS.push({id:"packtop_"+p.id, name:`Top of the Ladder: ${p.name}`, desc:`Reach the highest rank in ${p.name}.`, cond:s=>!!(s.packTop && s.packTop[p.id])});
 });
 ACHIEVEMENTS.push({id:"jack_of_trades", name:"Jack of All Trades", desc:"Work in 3 different Career Packs.", cond:s=>(s.packsWorked||[]).length>=3});
+
+/* ===== ROUND 5A: MORE MENU, JOURNAL, ENDINGS, WORLD EVENTS, SEASONS, TUTORIAL ===== */
+const MORE_ITEMS = [];   // {icon,title,sub,open}
+function openMoreModal(){
+  openModal(`<h3>📚 More</h3><div class="modal-sub">Extra things to do, read and explore.</div>` +
+    MORE_ITEMS.map((m,i)=>`<div class="card"><div class="card-row"><div><div class="card-title">${m.icon} ${m.title}</div><div class="card-sub">${m.sub}</div></div></div>
+      <button class="btn secondary" data-more="${i}" style="margin-top:10px;">Open</button></div>`).join("") +
+    `<button class="btn secondary" id="close-modal-btn" style="margin-top:6px;">Close</button>`);
+  document.querySelectorAll("#modal [data-more]").forEach(b=> b.onclick = ()=>MORE_ITEMS[Number(b.dataset.more)].open());
+  document.getElementById("close-modal-btn").onclick = closeModal;
+}
+/* ---- journal / milestones ---- */
+const MILESTONE_RE = /married|divorc|was born|graduat|promot|achievement unlocked|elected|inherit|sentenced|jail|had a baby|baby|you won|bought|started|launched|retired|moved to|fired|hired|landed|bankrupt|went public|medal|michelin|title|reached the top|released|signed|founded|arrested|escaped|prestige/i;
+log = (function(orig){ return function(text){
+  orig.apply(this, arguments);
+  try{
+    if(S && typeof text==="string" && MILESTONE_RE.test(text)){
+      S.milestones = S.milestones || [];
+      if(!S.milestones.length || S.milestones[S.milestones.length-1].text!==text){
+        S.milestones.push({age:S.age, text:text});
+        if(S.milestones.length>400) S.milestones.shift();
+      }
+    }
+  }catch(e){}
+}; })(log);
+const ENDINGS = [
+ {id:"infamous", name:"The Infamous", desc:"Remembered for a life of crime.", cond:s=>(s.murderCount||0)>=1 || (s.crimeCount||0)>=20},
+ {id:"legend", name:"A Legend", desc:"Fame of 80 or more.", cond:s=>(s.fame||0)>=80},
+ {id:"tycoon", name:"The Tycoon", desc:"Died with over $10,000,000.", cond:()=>netWorth()>=10000000},
+ {id:"centenarian", name:"A Century Lived", desc:"Lived to 100.", cond:s=>s.age>=100},
+ {id:"patriarch", name:"Head of the Family", desc:"Left three or more living children behind at 70+.", cond:s=>s.age>=70 && s.children.filter(c=>c.alive).length>=3},
+ {id:"quiet", name:"A Quiet Life", desc:"Lived modestly and happily to 75+.", cond:s=>s.age>=75 && netWorth()<150000 && s.stats.happiness>=60},
+ {id:"tragic", name:"Gone Too Soon", desc:"Died before 25.", cond:s=>s.age<25},
+ {id:"cutshort", name:"Cut Short", desc:"Died before 45.", cond:s=>s.age<45},
+ {id:"full", name:"A Full Life", desc:"Lived to 70 or beyond.", cond:s=>s.age>=70},
+ {id:"ordinary", name:"An Ordinary Life", desc:"A life like most others.", cond:()=>true},
+];
+function endingFor(s){ return ENDINGS.find(e=>{ try{ return e.cond(s); }catch(_){ return false; } }) || ENDINGS[ENDINGS.length-1]; }
+function openJournalModal(){
+  const ms = (S.milestones||[]).slice().reverse();
+  const past = (META.pastLives||[]).slice().reverse();
+  const seen = META.endingsSeen||{};
+  openModal(`
+    <h3>📖 Life Journal</h3>
+    <div class="modal-sub">The moments that defined this life, and the lives before it.</div>
+    <div class="section-title">This life (${ms.length})</div>
+    ${ms.length ? ms.slice(0,120).map(m=>`<div class="feed-item"><span class="age-mark">AGE ${m.age}</span>${m.text}</div>`).join("") : `<div class="empty-note">Nothing recorded yet — go live a little.</div>`}
+    <div class="section-title" style="margin-top:14px;">Past lives (${past.length})</div>
+    ${past.length ? past.slice(0,30).map(p=>`<div class="card"><div class="card-title">${p.name}</div><div class="card-sub">Died at ${p.age} in ${p.country} · ${fmt(p.nw)} · Gen ${p.gen} · ${p.ending||''}${p.cause?`<br>${p.cause}`:''}</div></div>`).join("") : `<div class="empty-note">No past lives yet.</div>`}
+    <div class="section-title" style="margin-top:14px;">Endings found (${Object.keys(seen).length}/${ENDINGS.length})</div>
+    ${ENDINGS.map(e=>`<div class="card" style="opacity:${seen[e.id]?1:0.45}"><div class="card-title">${seen[e.id]?'📜':'🔒'} ${seen[e.id]?e.name:'???'}</div><div class="card-sub">${seen[e.id]?e.desc:'Hidden — keep living to find it.'}</div></div>`).join("")}
+    <button class="btn secondary" id="close-modal-btn" style="margin-top:8px;">Close</button>`);
+  document.getElementById("close-modal-btn").onclick = closeModal;
+}
+MORE_ITEMS.push({icon:"📖", title:"Life Journal", sub:"Milestones, past lives and endings", open:openJournalModal});
+
+/* ---- world events ---- */
+function _mulPrices(obj, f){ if(!obj) return; Object.keys(obj).forEach(k=>{ obj[k] = Math.max(0.01, Math.round(obj[k]*f*100)/100); }); }
+function _mulHouses(f){ S.houses.forEach(h=>{ if(h.value===undefined) h.value=h.cost; h.value = Math.round(h.value*f); }); }
+const WORLD_EVENTS = [
+ {id:"crisis",  icon:"📉", name:"Financial Crisis", years:2, start:()=>{ _mulPrices(S.stockPrices,0.75); _mulPrices(S.cryptoPrices,0.6); _mulHouses(0.9); }, yearly:()=>{ adjStat("happiness",-2); }, text:"Markets crash and housing slides."},
+ {id:"techboom",icon:"🚀", name:"Tech Boom", years:2, start:()=>{ _mulPrices(S.stockPrices,1.22); _mulPrices(S.cryptoPrices,1.3); }, yearly:()=>{ adjStat("happiness",1); }, text:"A wave of innovation lifts the markets."},
+ {id:"pandemic",icon:"🦠", name:"Global Pandemic", years:2, start:()=>{ _mulPrices(S.stockPrices,0.85); }, yearly:()=>{ adjStat("health",-3); adjStat("happiness",-3); }, text:"A new virus sweeps the world."},
+ {id:"housing", icon:"🏘️", name:"Housing Boom", years:2, start:()=>{ _mulHouses(1.12); }, yearly:()=>{}, text:"Property prices climb across the country."},
+ {id:"inflation",icon:"💸", name:"Inflation Spike", years:2, start:()=>{}, yearly:()=>{ if(S.age>=18) spendOrDebt(Math.max(300, Math.round(S.age*20))); }, text:"Everything costs more. Your wallet feels it each year."},
+ {id:"war",     icon:"⚔️", name:"War Abroad", years:3, start:()=>{ _mulPrices(S.stockPrices,0.9); }, yearly:()=>{ adjStat("happiness",-1); }, text:"A distant conflict rattles the world."},
+ {id:"golden",  icon:"🌟", name:"Golden Years", years:3, start:()=>{ _mulPrices(S.stockPrices,1.1); }, yearly:()=>{ adjStat("happiness",2); }, text:"Peace and growth. Spirits are high."},
+];
+function worldTick(){
+  if(!S || !S.alive) return;
+  if(S.world && S.world.left>0){
+    const w = WORLD_EVENTS.find(e=>e.id===S.world.id);
+    try{ w && w.yearly(); }catch(e){}
+    S.world.left--;
+    if(S.world.left<=0){ log(`The ${w?w.name.toLowerCase():'world event'} has ended.`); S.world=null; }
+    return;
+  }
+  if(S.age>=14 && chance(0.1)){
+    const w = WORLD_EVENTS[rand(0,WORLD_EVENTS.length-1)];
+    S.world = {id:w.id, left:w.years};
+    try{ w.start(); }catch(e){}
+    log(`🌍 World news: ${w.name}. ${w.text}`);
+    showToast(`🌍 ${w.name}: ${w.text}`);
+  }
+}
+/* ---- seasonal events ---- */
+function currentSeason(){
+  const d=new Date(), m=d.getMonth(), y=d.getFullYear();
+  if(m===11) return {id:"xmas-"+y,
+    title:"🎄 Christmas", text:()=>"The holidays are here. How will you spend them?",
+    options:[
+      {label:()=>`Host a big dinner (${fmt(800)})`, run:()=>{ spendOrDebt(800); adjStat("happiness",10); return "A warm, noisy Christmas dinner with the whole family."; }},
+      {label:()=>`Donate to charity (${fmt(500)})`, run:()=>{ spendOrDebt(500); S.karma=(S.karma||0)+4; adjStat("happiness",5); return "You gave to those who needed it this Christmas."; }}]};
+  if(m===0 && d.getDate()<=7) return {id:"ny-"+y,
+    title:"🎆 New Year's Resolution", text:()=>"A fresh start. What will you commit to this year?",
+    options:[
+      {label:()=>"Get healthy", run:()=>{ adjStat("health",8); return "You committed to a healthier year."; }},
+      {label:()=>"Save money", run:()=>{ S.savings += 1000; return "You put an extra $1,000 into savings."; }},
+      {label:()=>"Learn something new", run:()=>{ adjStat("smarts",3,true); return "You started learning something new."; }}]};
+  if(m>=5 && m<=7) return {id:"summer-"+y,
+    title:"☀️ Summer Holiday", text:()=>"Summer is here and everyone is leaving town.",
+    options:[
+      {label:()=>`Go abroad (${fmt(3000)})`, run:()=>{ spendOrDebt(3000); adjStat("happiness",12); return "An unforgettable summer holiday abroad."; }},
+      {label:()=>"Staycation (free)", run:()=>{ adjStat("happiness",4); return "A quiet summer at home."; }}]};
+  if(m===9) return {id:"halloween-"+y,
+    title:"🎃 Halloween", text:()=>"It's Halloween night. Costumes, candy, and mischief.",
+    options:[
+      {label:()=>"Go to a costume party", run:()=>{ adjStat("happiness",7); return "Best costume of the night."; }},
+      {label:()=>"Hand out candy", run:()=>{ S.karma=(S.karma||0)+2; adjStat("happiness",3); return "The neighbourhood kids loved your house."; }}]};
+  return null;
+}
+function seasonTick(){
+  if(!S || !S.alive || S.age<8) return;
+  const s = currentSeason(); if(!s) return;
+  META.seasonDone = META.seasonDone || {};
+  if(META.seasonDone[s.id+"|"+(S.name||"")]) return;
+  if(document.getElementById("modal-backdrop").classList.contains("show")) return;
+  if(document.getElementById("deathscreen").classList.contains("show")) return;
+  META.seasonDone[s.id+"|"+(S.name||"")] = true; META.points += 1; saveMeta();
+  showLifeEvent({title:s.title, text:s.text, options:s.options});
+}
+/* ---- tutorial ---- */
+const TUTORIAL_STEPS = [
+ {t:"Welcome to The Ledger Life", x:"Every tap of Age Up moves you one year forward. Your choices shape health, money, relationships and your legacy."},
+ {t:"Your stats", x:"Health, happiness, smarts and looks sit at the top. If health hits zero, your story ends — look after yourself."},
+ {t:"The tabs", x:"Use the bottom bar to manage money, stocks, businesses, careers, crime, assets, social life and more. Your smartphone opens real estate, vehicles and news."},
+ {t:"Careers & Packs", x:"In the Career tab you can study, apply for jobs and — once you're an adult — start free Career Packs like Tech, Medicine, Law or Aviation."},
+ {t:"Legacy", x:"When a life ends you earn Legacy Points. Spend them on permanent perks, and keep the family going through your children."},
+ {t:"Goals & settings", x:"Check Daily Goals for bonus points, open Settings for music, difficulty, backups and the suggestion box. Have fun!"},
+];
+function openTutorial(i){
+  i = i||0; const st = TUTORIAL_STEPS[i];
+  openModal(`<h3>📘 ${st.t}</h3><div class="modal-sub">${st.x}</div>
+    <div class="card-sub" style="text-align:center; margin:6px 0;">${i+1} / ${TUTORIAL_STEPS.length}</div>
+    <button class="btn" id="tut-next" style="margin-top:8px;">${i<TUTORIAL_STEPS.length-1?'Next':'Start playing'}</button>
+    <button class="btn secondary" id="tut-skip" style="margin-top:8px;">${i<TUTORIAL_STEPS.length-1?'Skip':'Close'}</button>`);
+  const finish = ()=>{ PREFS.tutorialDone = true; savePrefs(); closeModal(); };
+  document.getElementById("tut-next").onclick = ()=>{ if(i<TUTORIAL_STEPS.length-1){ openTutorial(i+1); } else finish(); };
+  document.getElementById("tut-skip").onclick = finish;
+}
+MORE_ITEMS.push({icon:"📘", title:"How to Play", sub:"A short walkthrough of the game", open:()=>openTutorial(0)});
+startShell = (function(orig){ return function(){
+  const r = orig.apply(this, arguments);
+  try{ if(!PREFS.tutorialDone && S && S.age<=1) setTimeout(()=>openTutorial(0), 500); }catch(e){}
+  return r;
+}; })(startShell);
+["survivor","beloved","hermit_rich","great_dynasty","scholar_elite","jack_of_trades"].forEach(id=>{ const a=ACHIEVEMENTS.find(x=>x.id===id); if(a) a.hidden=true; });
+/* ---- wire-up ---- */
+ageUp = (function(orig){ return function(){
+  const r = orig.apply(this, arguments);
+  try{ worldTick(); seasonTick(); }catch(e){}
+  return r;
+}; })(ageUp);
+RENDERERS.life = (function(orig){ return function(){
+  const w = orig.apply(this, arguments);
+  try{
+    if(w && w.appendChild){
+      if(S.world){
+        const we = WORLD_EVENTS.find(e=>e.id===S.world.id);
+        if(we) w.insertBefore(el(`<div class="card" style="border-color:var(--gold);"><div class="card-title">${we.icon} World: ${we.name}</div><div class="card-sub">${we.text} · ${S.world.left} year${S.world.left===1?'':'s'} left</div></div>`), w.children[1]||null);
+      }
+      const c = el(`<div class="card"><div class="card-row"><div class="card-title">📚 More</div><div class="card-sub">Journal, mini-games, hobbies &amp; more</div></div><button class="btn secondary" id="more-open-btn" style="margin-top:10px;">Open</button></div>`);
+      c.querySelector("#more-open-btn").onclick = openMoreModal;
+      w.appendChild(c);
+    }
+  }catch(e){}
+  return w;
+}; })(RENDERERS.life);
+
+/* ===== ROUND 5B (1): OVERSEAS PROPERTY, MINI-GAMES, HOBBIES, FRIENDS & RIVALS, SHADOW DEALS ===== */
+/* ---- overseas property ---- */
+const ABROAD_MULT = {"Monaco":3,"Switzerland":2.2,"Cayman Islands":1.8,"Singapore":1.8,"United Arab Emirates":1.6,"Bahamas":1.5,"United Kingdom":1.5,"Norway":1.4,"United States":1.3,"Japan":1.2,"France":1.2,"Australia":1.2,"Germany":1.1,"Canada":1.1,"South Korea":1.0,"Brazil":0.7,"Mexico":0.6,"India":0.5,"Nigeria":0.45};
+const ABROAD_TYPES = [{id:"apt",name:"Apartment",base:150000},{id:"villa",name:"Villa",base:450000},{id:"pent",name:"Penthouse",base:1200000}];
+function openAbroadModal(){
+  if(S.age<18){ showToast("Overseas property is for adults."); return; }
+  const mine = S.houses.filter(h=>h.abroad);
+  const countries = COUNTRIES.filter(c=>c!==S.country);
+  openModal(`
+    <h3>🏝️ Overseas Property</h3>
+    <div class="modal-sub">Buy property abroad to rent out or holiday in. Tax-free countries pay a little extra rent.</div>
+    ${mine.length ? `<div class="section-title">Your overseas properties</div>` + mine.map((h,i)=>`<div class="card"><div class="card-title">${h.name}</div>
+      <div class="card-sub">Value ${fmt(h.value!==undefined?h.value:h.cost)} · rent ${fmt(h.currentRent||h.rent||0)}/yr</div>
+      <button class="btn secondary" data-hol="${i}" style="margin-top:8px;" ${S.abroadHol&&S.abroadHol[h.id]?'disabled':''}>${S.abroadHol&&S.abroadHol[h.id]?'Holiday taken this year':'Take a holiday here'}</button></div>`).join("") : ""}
+    <div class="section-title" style="margin-top:12px;">Buy in…</div>
+    ${countries.map(c=>`<div class="card"><div class="card-row"><div><div class="card-title">${c}</div><div class="card-sub">${(COUNTRY_INFO[c]||{}).perk||''}</div></div><button class="small-btn gold" data-c="${c}">Browse</button></div></div>`).join("")}
+    <button class="btn secondary" id="close-modal-btn" style="margin-top:8px;">Close</button>`);
+  document.querySelectorAll("#modal [data-hol]").forEach(b=> b.onclick = ()=>{
+    const h = mine[Number(b.dataset.hol)]; S.abroadHol = S.abroadHol||{}; S.abroadHol[h.id]=true;
+    adjStat("happiness",9); adjStat("health",2); log(`You spent a holiday at your ${h.name}.`); showToast("A wonderful holiday."); openAbroadModal(); renderAll();
+  });
+  document.querySelectorAll("#modal [data-c]").forEach(b=> b.onclick = ()=>openAbroadCountry(b.dataset.c));
+  document.getElementById("close-modal-btn").onclick = closeModal;
+}
+function openAbroadCountry(c){
+  const m = ABROAD_MULT[c]||1, tf = (COUNTRY_INFO[c]||{}).taxFree;
+  openModal(`<h3>🏝️ ${c}</h3><div class="modal-sub">${(COUNTRY_INFO[c]||{}).perk||''}</div>
+    ${ABROAD_TYPES.map(t=>{ const cost=Math.round(t.base*m); const rent=Math.round(cost*0.06*(tf?1.1:1));
+      return `<div class="card"><div class="card-title">${t.name}</div><div class="card-sub">${fmt(cost)} · rent ~${fmt(rent)}/yr</div>
+        <button class="btn gold" data-t="${t.id}" style="margin-top:8px;">Buy (${fmt(cost)})</button></div>`; }).join("")}
+    <button class="btn secondary" id="back-btn" style="margin-top:8px;">Back</button>`);
+  document.querySelectorAll("#modal [data-t]").forEach(b=> b.onclick = ()=>{
+    const t = ABROAD_TYPES.find(x=>x.id===b.dataset.t); const cost = Math.round(t.base*m); const rent = Math.round(cost*0.06*(tf?1.1:1));
+    if(S.money<cost){ showToast("Not enough cash."); return; }
+    S.money -= cost;
+    S.houses.push({id:"abroad_"+Date.now()+rand(0,999), name:`${t.name} in ${c}`, cost, value:cost, rent, currentRent:rent, status:"rental", condition:100, custom:false, abroad:c});
+    log(`You bought a ${t.name.toLowerCase()} in ${c} for ${fmt(cost)}.`); showToast(`Bought a ${t.name.toLowerCase()} in ${c}.`);
+    openAbroadModal(); renderAll();
+  });
+  document.getElementById("back-btn").onclick = openAbroadModal;
+}
+MORE_ITEMS.push({icon:"🏝️", title:"Overseas Property", sub:"Buy, rent out and holiday abroad", open:openAbroadModal});
+ACHIEVEMENTS.push({id:"global_landlord", name:"Global Landlord", desc:"Own overseas property in 3 different countries.", cond:s=>new Set((s.houses||[]).filter(h=>h.abroad).map(h=>h.abroad)).size>=3});
+
+/* ---- mini-games ---- */
+const MINI_CAP = 6;
+function miniLeft(k){ S.miniPlays = S.miniPlays||{}; return MINI_CAP-(S.miniPlays[k]||0); }
+function miniUse(k){ S.miniPlays = S.miniPlays||{}; S.miniPlays[k]=(S.miniPlays[k]||0)+1; }
+function openMiniGames(){
+  openModal(`<h3>🎲 Mini-Games</h3><div class="modal-sub">Quick games for a little cash. Limited plays per year.</div>
+    <div class="card"><div class="card-title">🃏 Blackjack</div><div class="card-sub">Beat the dealer to 21. ${miniLeft("bj")} play(s) left this year.</div><button class="btn" id="mg-bj" style="margin-top:8px;" ${miniLeft("bj")<=0?'disabled':''}>Play</button></div>
+    <div class="card"><div class="card-title">📈 Market Sprint</div><div class="card-sub">Call five stock moves in a row. ${miniLeft("ms")} play(s) left.</div><button class="btn" id="mg-ms" style="margin-top:8px;" ${miniLeft("ms")<=0?'disabled':''}>Play</button></div>
+    <div class="card"><div class="card-title">🧠 Trivia Quiz</div><div class="card-sub">Answer five questions for cash and smarts. ${Math.max(0,2-((S.miniPlays||{}).tr||0))} play(s) left.</div><button class="btn" id="mg-tr" style="margin-top:8px;" ${((S.miniPlays||{}).tr||0)>=2?'disabled':''}>Play</button></div>
+    <button class="btn secondary" id="close-modal-btn" style="margin-top:8px;">Close</button>`);
+  document.getElementById("mg-bj").onclick = openBlackjack;
+  document.getElementById("mg-ms").onclick = openSprint;
+  document.getElementById("mg-tr").onclick = openTrivia;
+  document.getElementById("close-modal-btn").onclick = closeModal;
+}
+MORE_ITEMS.push({icon:"🎲", title:"Mini-Games", sub:"Blackjack, Market Sprint and Trivia", open:openMiniGames});
+function _betButtons(onPick){
+  const bets=[100,500,2000]; return bets.map(b=>`<button class="btn ${S.money>=b?'':'secondary'}" data-bet="${b}" style="margin-top:8px;" ${S.money<b?'disabled':''}>Bet ${fmt(b)}</button>`).join("");
+}
+function openBlackjack(){
+  openModal(`<h3>🃏 Blackjack</h3><div class="modal-sub">Pick your bet. Cash on hand: ${fmt(S.money)}.</div><div id="bj-area">${_betButtons()}</div>
+    <button class="btn secondary" id="mg-back" style="margin-top:8px;">Back</button>`);
+  document.getElementById("mg-back").onclick = openMiniGames;
+  document.querySelectorAll("#modal [data-bet]").forEach(b=> b.onclick = ()=>bjStart(Number(b.dataset.bet)));
+}
+function bjStart(bet){
+  const draw = ()=>{ const r=rand(1,13); return r===1?11:Math.min(r,10); };
+  const total = (h)=>{ let t=h.reduce((a,b)=>a+b,0), a=h.filter(x=>x===11).length; while(t>21 && a>0){ t-=10; a--; } return t; };
+  const p=[draw(),draw()], d=[draw(),draw()];
+  miniUse("bj");
+  const area = document.getElementById("bj-area");
+  const finish = (res)=>{
+    let delta=0, msg="";
+    if(res==="bj"){ delta=Math.round(bet*1.5); msg=`Blackjack! You won ${fmt(delta)}.`; }
+    else if(res==="win"){ delta=bet; msg=`You beat the dealer and won ${fmt(bet)}.`; }
+    else if(res==="push"){ msg="Push — you get your bet back."; }
+    else { delta=-bet; msg=`The dealer won. You lost ${fmt(bet)}.`; }
+    if(delta>0) S.money+=delta; else if(delta<0) spendOrDebt(-delta);
+    S._everGambled = true; log(`Blackjack: ${msg}`); showToast(msg);
+    area.innerHTML = `<div class="card"><div class="card-title">${msg}</div><div class="card-sub">You: ${p.join(", ")} (${total(p)}) · Dealer: ${d.join(", ")} (${total(d)})</div></div>
+      <button class="btn" id="bj-again" style="margin-top:8px;" ${miniLeft("bj")<=0?'disabled':''}>Play again</button>`;
+    document.getElementById("bj-again").onclick = openBlackjack; renderAll();
+  };
+  const render = ()=>{
+    area.innerHTML = `<div class="card"><div class="card-title">Your hand: ${p.join(", ")} (${total(p)})</div><div class="card-sub">Dealer shows: ${d[0]}</div></div>
+      <div class="btn-row"><button class="btn" id="bj-hit">Hit</button><button class="btn secondary" id="bj-stand">Stand</button></div>`;
+    document.getElementById("bj-hit").onclick = ()=>{ p.push(draw()); if(total(p)>21) finish("lose"); else render(); };
+    document.getElementById("bj-stand").onclick = ()=>{
+      while(total(d)<17) d.push(draw());
+      const pt=total(p), dt=total(d);
+      finish(dt>21||pt>dt?"win": pt===dt?"push":"lose");
+    };
+  };
+  if(total(p)===21){ finish("bj"); } else render();
+}
+function openSprint(){
+  openModal(`<h3>📈 Market Sprint</h3><div class="modal-sub">Choose your stake. Call five moves — win three or more to double it.</div><div id="ms-area">${_betButtons()}</div>
+    <button class="btn secondary" id="mg-back" style="margin-top:8px;">Back</button>`);
+  document.getElementById("mg-back").onclick = openMiniGames;
+  document.querySelectorAll("#modal [data-bet]").forEach(b=> b.onclick = ()=>sprintStart(Number(b.dataset.bet)));
+}
+function sprintStart(stake){
+  miniUse("ms");
+  const syms = ["NOVA","ATLAS","KITE","EMBER","ORBIT"]; let round=0, wins=0;
+  const area = document.getElementById("ms-area");
+  const next = ()=>{
+    if(round>=5){
+      const won = wins>=3; const msg = won ? `You called ${wins}/5 and won ${fmt(stake)}.` : `You only called ${wins}/5 and lost ${fmt(stake)}.`;
+      if(won) S.money+=stake; else spendOrDebt(stake);
+      S._everGambled = true; log(`Market Sprint: ${msg}`); showToast(msg);
+      area.innerHTML = `<div class="card"><div class="card-title">${msg}</div></div><button class="btn" id="ms-again" style="margin-top:8px;" ${miniLeft("ms")<=0?'disabled':''}>Play again</button>`;
+      document.getElementById("ms-again").onclick = openSprint; renderAll(); return;
+    }
+    area.innerHTML = `<div class="card"><div class="card-title">Round ${round+1}/5 — ${syms[round]}</div><div class="card-sub">Will it rise or fall? (${wins} correct so far)</div></div>
+      <div class="btn-row"><button class="btn" id="ms-up">📈 Rise</button><button class="btn secondary" id="ms-down">📉 Fall</button></div>`;
+    const pick = (up)=>{ const rises = chance(0.5); if(rises===up) wins++; round++; next(); };
+    document.getElementById("ms-up").onclick = ()=>pick(true);
+    document.getElementById("ms-down").onclick = ()=>pick(false);
+  };
+  next();
+}
+const TRIVIA = [
+ ["What is the capital of Norway?",["Oslo","Bergen","Trondheim"],0],["Which planet is closest to the Sun?",["Venus","Mercury","Mars"],1],
+ ["How many continents are there?",["5","6","7"],2],["What is H2O?",["Water","Salt","Oxygen"],0],
+ ["Who painted the Mona Lisa?",["Michelangelo","Da Vinci","Raphael"],1],["Which ocean is the largest?",["Atlantic","Indian","Pacific"],2],
+ ["What is 12 × 12?",["124","144","164"],1],["Which gas do plants absorb?",["Carbon dioxide","Helium","Nitrogen"],0],
+ ["What is the largest mammal?",["African elephant","Blue whale","Giraffe"],1],["In which year did World War II end?",["1943","1945","1948"],1],
+ ["What is the hardest natural material?",["Gold","Diamond","Iron"],1],["Which language has the most native speakers?",["English","Spanish","Mandarin"],2],
+ ["How many minutes are in a day?",["1,240","1,440","1,640"],1],["Which metal is liquid at room temperature?",["Mercury","Lead","Tin"],0],
+ ["What is the capital of Japan?",["Kyoto","Tokyo","Osaka"],1],["Who wrote 'Romeo and Juliet'?",["Dickens","Shakespeare","Austen"],1],
+ ["How many sides does a hexagon have?",["5","6","8"],1],["What is the freezing point of water in °C?",["0","10","-10"],0],
+ ["Which planet has rings most famously?",["Saturn","Mars","Earth"],0],["What do bees make?",["Honey","Silk","Wax paper"],0],
+];
+function openTrivia(){
+  miniUse("tr"); const qs = TRIVIA.slice().sort(()=>Math.random()-0.5).slice(0,5); let i=0, score=0;
+  const render = ()=>{
+    if(i>=qs.length){
+      const pay = score*150; if(pay) S.money+=pay; if(score>=4) adjStat("smarts",1,true);
+      const msg = `Trivia: ${score}/5 correct${pay?` — you earned ${fmt(pay)}`:''}.`; log(msg); showToast(msg);
+      openModal(`<h3>🧠 Trivia Quiz</h3><div class="card"><div class="card-title">${msg}</div></div><button class="btn secondary" id="mg-back" style="margin-top:8px;">Back</button>`);
+      document.getElementById("mg-back").onclick = openMiniGames; renderAll(); return;
+    }
+    const q=qs[i]; const order=[0,1,2].sort(()=>Math.random()-0.5);
+    openModal(`<h3>🧠 Question ${i+1}/5</h3><div class="modal-sub">${q[0]}</div>` + order.map(k=>`<button class="btn secondary" data-a="${k}" style="margin-top:8px;">${q[1][k]}</button>`).join(""));
+    document.querySelectorAll("#modal [data-a]").forEach(b=> b.onclick = ()=>{ if(Number(b.dataset.a)===q[2]) score++; i++; render(); });
+  };
+  render();
+}
+
+/* ---- hobbies ---- */
+const HOBBIES = [
+ {id:"chess",icon:"♟️",name:"Chess",cost:0},{id:"painting",icon:"🎨",name:"Painting",cost:120},{id:"gardening",icon:"🌱",name:"Gardening",cost:80},
+ {id:"photo",icon:"📷",name:"Photography",cost:200},{id:"hiking",icon:"🥾",name:"Hiking",cost:60},{id:"cooking",icon:"🍲",name:"Home Cooking",cost:90},
+ {id:"guitar",icon:"🎸",name:"Guitar",cost:150},
+];
+function openHobbies(){
+  S.hobbies = S.hobbies||{}; S.hobbyActs = S.hobbyActs||{};
+  const petShow = (S.pets&&S.pets.length)?`<div class="card"><div class="card-title">🐾 Pet Show</div><div class="card-sub">Enter your pet for ${fmt(200)}. 35% chance to win ${fmt(1500)}. ${S.petShowYear?'Entered this year.':''}</div>
+    <button class="btn secondary" id="petshow-btn" style="margin-top:8px;" ${S.petShowYear?'disabled':''}>Enter</button></div>`:'';
+  openModal(`<h3>🎯 Hobbies</h3><div class="modal-sub">Practise to raise your skill. Skilled hobbyists feel happier each year and can win competitions.</div>
+    ${HOBBIES.map(h=>{ const sk=S.hobbies[h.id]||0, acts=S.hobbyActs[h.id]||0; return `<div class="card"><div class="card-row"><div class="card-title">${h.icon} ${h.name}</div><div class="money">${sk}/100</div></div>
+      <div class="bar" style="margin-top:6px;"><div class="fill" style="width:${sk}%; background:var(--gold);"></div></div>
+      <div class="btn-row" style="margin-top:8px;"><button class="small-btn gold" data-p="${h.id}" ${acts>=3?'disabled':''}>Practise${h.cost?` (${fmt(h.cost)})`:''} [${acts}/3]</button>
+      <button class="small-btn" data-comp="${h.id}" ${sk<20||S.hobbyComp&&S.hobbyComp[h.id]?'disabled':''}>Compete (${fmt(300)})</button></div></div>`; }).join("")}
+    ${petShow}
+    <button class="btn secondary" id="close-modal-btn" style="margin-top:8px;">Close</button>`);
+  document.querySelectorAll("#modal [data-p]").forEach(b=> b.onclick = ()=>{
+    const h = HOBBIES.find(x=>x.id===b.dataset.p); if((S.hobbyActs[h.id]||0)>=3) return;
+    if(h.cost) spendOrDebt(h.cost);
+    S.hobbyActs[h.id]=(S.hobbyActs[h.id]||0)+1; S.hobbies[h.id]=clamp((S.hobbies[h.id]||0)+rand(4,9),0,100);
+    adjStat("happiness",1); log(`You practised ${h.name.toLowerCase()}.`); openHobbies(); renderAll();
+  });
+  document.querySelectorAll("#modal [data-comp]").forEach(b=> b.onclick = ()=>{
+    const h = HOBBIES.find(x=>x.id===b.dataset.comp); S.hobbyComp = S.hobbyComp||{}; S.hobbyComp[h.id]=true; spendOrDebt(300);
+    const sk=S.hobbies[h.id]||0;
+    if(chance(clamp(sk/130,0.05,0.75))){ const prize=800+sk*60; S.money+=prize; adjStat("happiness",5); S.fameBonus=clamp((S.fameBonus||0)+1,-70,70); const m=`You won a ${h.name.toLowerCase()} competition and ${fmt(prize)}!`; log(m); showToast(m); }
+    else { adjStat("happiness",-2); const m=`You entered a ${h.name.toLowerCase()} competition but didn't place.`; log(m); showToast(m); }
+    openHobbies(); renderAll();
+  });
+  const ps = document.getElementById("petshow-btn");
+  if(ps) ps.onclick = ()=>{ S.petShowYear=true; spendOrDebt(200); if(chance(0.35)){ S.money+=1500; adjStat("happiness",4); const m="Your pet won best in show!"; log(m); showToast(m); } else { const m="Your pet didn't place — but was adored anyway."; log(m); showToast(m); } openHobbies(); renderAll(); };
+  document.getElementById("close-modal-btn").onclick = closeModal;
+}
+MORE_ITEMS.push({icon:"🎯", title:"Hobbies & Pet Shows", sub:"Chess, painting, guitar and more", open:openHobbies});
+ACHIEVEMENTS.push({id:"hobby_master", name:"Master of a Craft", desc:"Reach 80 skill in any hobby.", cond:s=>Object.values(s.hobbies||{}).some(v=>v>=80)});
+
+/* ---- friends & rivals ---- */
+const RIVAL_SURNAMES = ["Blackwood","Sterling","Voss","Hale","Marlowe","Kincaid","Delgado","Frost","Ashford","Lindqvist","Rourke","Vance"];
+function openSocialCircle(){
+  S.rivals = S.rivals||[]; const fr = S.friends||[];
+  openModal(`<h3>🤝 Friends & Rivals</h3>
+    <div class="section-title">Friends (${fr.length})</div>
+    ${fr.length?fr.map((f,i)=>`<div class="card"><div class="card-row"><div><div class="card-title">${f.name}</div><div class="card-sub">Closeness ${f.closeness}/100</div></div>
+      <button class="small-btn gold" data-hang="${i}" ${(f._h||0)>=2?'disabled':''}>Hang out (${fmt(50)}) [${f._h||0}/2]</button></div></div>`).join(""):`<div class="empty-note">No friends yet. Friendships appear as you live your life.</div>`}
+    <div class="section-title" style="margin-top:12px;">Rivals (${S.rivals.length})</div>
+    ${S.rivals.length?S.rivals.map((r,i)=>`<div class="card"><div class="card-title">${r.name}</div><div class="card-sub">Rivalry level ${r.level} · record ${r.won}W–${r.lost}L</div>
+      <div class="btn-row" style="margin-top:8px;"><button class="small-btn gold" data-ch="${i}" ${r._c?'disabled':''}>Challenge</button><button class="small-btn" data-pe="${i}">Make peace</button></div></div>`).join(""):`<div class="empty-note">No rivals. Success tends to attract them.</div>`}
+    <button class="btn secondary" id="close-modal-btn" style="margin-top:8px;">Close</button>`);
+  document.querySelectorAll("#modal [data-hang]").forEach(b=> b.onclick = ()=>{
+    const f = fr[Number(b.dataset.hang)]; if((f._h||0)>=2) return; f._h=(f._h||0)+1; spendOrDebt(50);
+    f.closeness = clamp(f.closeness+rand(5,12),0,100); adjStat("happiness",3); log(`You hung out with ${f.name}.`); openSocialCircle(); renderAll();
+  });
+  document.querySelectorAll("#modal [data-ch]").forEach(b=> b.onclick = ()=>{
+    const r = S.rivals[Number(b.dataset.ch)]; r._c = true;
+    if(chance(clamp(0.45+S.stats.smarts/500 + (S.fame||0)/500,0.25,0.8))){ r.won++; const a=rand(2000,15000)*r.level; S.money+=a; adjStat("happiness",4); const m=`You outdid ${r.name} and earned ${fmt(a)}.`; log(m); showToast(m); }
+    else { r.lost++; r.level=Math.min(5,r.level+1); adjStat("happiness",-4); const m=`${r.name} got the better of you this time.`; log(m); showToast(m); }
+    openSocialCircle(); renderAll();
+  });
+  document.querySelectorAll("#modal [data-pe]").forEach(b=> b.onclick = ()=>{
+    const i = Number(b.dataset.pe), r = S.rivals[i];
+    if(chance(0.6)){ S.friends = S.friends||[]; S.friends.push({name:r.name, closeness:25, gender:"male", royal:false}); S.rivals.splice(i,1); S.karma=(S.karma||0)+2; const m=`You made peace with ${r.name} — now friends.`; log(m); showToast(m); }
+    else { const m=`${r.name} wasn't ready to make peace.`; log(m); showToast(m); }
+    openSocialCircle(); renderAll();
+  });
+  document.getElementById("close-modal-btn").onclick = closeModal;
+}
+MORE_ITEMS.push({icon:"🤝", title:"Friends & Rivals", sub:"Hang out, compete and make peace", open:openSocialCircle});
+LIFE_EVENTS.push({id:"newrival", w:2, cond:()=>S.age>=18 && (S.rivals||[]).length<4, title:"😠 A Rival Appears",
+  text:()=>{ S._evtRival = {name:`${randomFirst(chance(0.5)?"male":"female")} ${RIVAL_SURNAMES[rand(0,RIVAL_SURNAMES.length-1)]}`, level:1, won:0, lost:0}; return `${S._evtRival.name} has been matching you at every turn — and making sure you know it.`; },
+  options:[
+   {label:()=>"Take them on", run:()=>{ S.rivals=S.rivals||[]; S.rivals.push(S._evtRival); return `A rivalry with ${S._evtRival.name} begins. See Friends & Rivals under More.`; }},
+   {label:()=>"Extend a hand", run:()=>{ S.friends=S.friends||[]; S.friends.push({name:S._evtRival.name, closeness:20, gender:"male", royal:false}); S.karma=(S.karma||0)+1; return `You turned a rival into a friend: ${S._evtRival.name}.`; }},
+   {label:()=>"Ignore them", run:()=>"You rose above it."},
+  ]});
+/* ---- shadow deals ---- */
+[
+ {id:"briefcase", w:1, title:"💼 A Briefcase of Cash", text:()=>"A stranger leaves a briefcase with $25,000 at your door, with a note: \"For a small favour later.\"",
+  options:[
+   {label:()=>"Keep it", run:()=>{ S.money+=25000; S.karma=(S.karma||0)-3; S.crimeCount=(S.crimeCount||0)+1; if(chance(0.2)){ S.criminalRecord=true; return "You kept the money — and police traced it back to you."; } return "You kept the money. The favour never came... yet."; }},
+   {label:()=>"Hand it to the police", run:()=>{ S.karma=(S.karma||0)+3; adjStat("happiness",3); return "You turned it in. Your conscience is clear."; }},
+  ]},
+ {id:"insider", w:1, title:"📞 An Insider Tip", text:()=>"A friend at a big company whispers that their earnings will blow past expectations. Buy now?",
+  options:[
+   {label:()=>"Trade on it", run:()=>{ S.crimeCount=(S.crimeCount||0)+1; S.karma=(S.karma||0)-2; if(chance(0.6)){ S.money+=40000; if(chance(0.25)){ spendOrDebt(30000); return "The trade paid off, but regulators fined you $30,000 later."; } return "The trade made you $40,000."; } return "The tip was wrong. You lost $15,000."; }},
+   {label:()=>"Stay out of it", run:()=>{ S.karma=(S.karma||0)+1; return "You passed on the tip. Slow and steady."; }},
+  ]},
+ {id:"cashhide", w:1, title:"🧾 Hide the Income?", text:()=>"A cash payment of $20,000 came in. Nobody would ever know if it stayed off the books.",
+  options:[
+   {label:()=>"Hide it", run:()=>{ S.money+=20000; S.karma=(S.karma||0)-2; if(chance(0.25)){ spendOrDebt(60000); return "The tax authority audited you and fined you $60,000."; } return "You kept $20,000 off the books."; }},
+   {label:()=>"Declare it", run:()=>{ S.money+=Math.round(20000*0.65); S.karma=(S.karma||0)+1; return "You declared it and kept the post-tax amount."; }},
+  ]},
+ {id:"witness", w:1, title:"👀 You Saw Something", text:()=>"You witness a hit-and-run. The driver speeds off. Nobody else saw it.",
+  options:[
+   {label:()=>"Report it", run:()=>{ S.karma=(S.karma||0)+3; adjStat("happiness",-1); return "You gave the police a statement. The driver was caught."; }},
+   {label:()=>"Look away", run:()=>{ S.karma=(S.karma||0)-2; adjStat("happiness",-3); return "You looked away. It haunts you a little."; }},
+  ]},
+ {id:"bribe", w:1, title:"🏛️ A Bribe Request", text:()=>"A city official hints that a permit you need could be 'expedited' for a fee of $10,000.",
+  options:[
+   {label:()=>`Pay the bribe (${fmt(10000)})`, run:()=>{ spendOrDebt(10000); S.crimeCount=(S.crimeCount||0)+1; S.karma=(S.karma||0)-3; if(chance(0.2)){ S.criminalRecord=true; return "The bribe worked — until an investigation found it."; } return "The permit came through overnight."; }},
+   {label:()=>"Refuse and wait", run:()=>{ S.karma=(S.karma||0)+2; adjStat("happiness",-2); return "You refused. The permit took a year."; }},
+  ]},
+].forEach(e=>{ e.cond = ()=> S.age>=21 && !(S.jailYears>0); LIFE_EVENTS.push(e); });
+/* ---- yearly reset ---- */
+ageUp = (function(orig){ return function(){
+  const r = orig.apply(this, arguments);
+  try{
+    if(S && S.alive){
+      S.miniPlays = {}; S.hobbyActs = {}; S.hobbyComp = {}; S.petShowYear = false; S.abroadHol = {};
+      (S.friends||[]).forEach(f=>{ f._h = 0; }); (S.rivals||[]).forEach(x=>{ x._c = false; });
+      const hb = Object.values(S.hobbies||{}); if(hb.length){ const bonus = Math.min(4, hb.reduce((a,v)=>a+Math.floor(v/25),0)); if(bonus) adjStat("happiness", bonus); }
+    }
+  }catch(e){}
+  return r;
+}; })(ageUp);
+
+/* ===== ROUND 5B (2): EXTRA MUSIC, SOUND EFFECTS, NORWEGIAN (PARTIAL) ===== */
+Object.assign(MUSIC_TRACKS, {
+  rainy:  {name:"Rainy Day",  bpm:58, wave:"sine",     density:0.3,  melody:0.3,
+           chords:[[57,60,64,69],[53,57,60,65],[55,58,62,67],[52,55,59,64]], scale:[69,72,74,76,79]},
+  showtime:{name:"Showtime",  bpm:96, wave:"triangle", density:0.7,  melody:0.5,
+           chords:[[60,64,67,70],[53,57,60,64],[55,59,62,65],[60,64,67,71]], scale:[72,74,76,79,81,84]},
+  dawn:   {name:"Dawn",       bpm:62, wave:"sine",     density:0.35, melody:0.3,
+           chords:[[55,59,62,67],[52,55,59,64],[48,52,55,60],[50,54,57,62]], scale:[74,76,79,81,83]},
+});
+/* sound effects */
+function sfx(kind){
+  try{
+    if(!S || !S.soundOn || PREFS.sfxVol<=0) return;
+    if(!audioCtx){ const AC = window.AudioContext||window.webkitAudioContext; if(!AC) return; audioCtx = new AC(); }
+    if(audioCtx.state==="suspended") audioCtx.resume();
+    const notes = kind==="good" ? [523,659,784] : kind==="bad" ? [392,294] : [660];
+    const t0 = audioCtx.currentTime;
+    notes.forEach((f,i)=>{
+      const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+      o.type = kind==="bad" ? "triangle" : "sine"; o.frequency.value = f;
+      const t = t0 + i*0.09;
+      g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.07*PREFS.sfxVol, t+0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t+0.16);
+      o.connect(g); g.connect(audioCtx.destination); o.start(t); o.stop(t+0.18);
+    });
+  }catch(e){}
+}
+showToast = (function(orig){ return function(message, duration){
+  try{
+    const m = String(message||"");
+    if(/promoted|you won|complete|achievement|bought|saved|earned|restored|upgraded/i.test(m)) sfx("good");
+    else if(/didn't|lost|failed|not enough|couldn't|killed|rejected/i.test(m)) sfx("bad");
+  }catch(e){}
+  return orig.apply(this, arguments);
+}; })(showToast);
+
+/* ---- Norwegian (partial) ---- */
+const NO_DICT = {
+ "Age Up →":"Eldre →","Life":"Liv","Bank":"Bank","Corp":"Selskap","Career":"Karriere","Crime":"Kriminalitet","Assets":"Eiendeler","Politics":"Politikk","Phone":"Telefon","Habits":"Vaner",
+ "Close":"Lukk","Cancel":"Avbryt","Back":"Tilbake","Next":"Neste","Skip":"Hopp over","Open":"Åpne","View":"Se","Manage":"Administrer","Send":"Send","Copy Code":"Kopier kode","Restore":"Gjenopprett",
+ "Settings":"Innstillinger","⚙️ Settings":"⚙️ Innstillinger","Achievements":"Prestasjoner","🏆 Achievements":"🏆 Prestasjoner","Start a New Life":"Start et nytt liv","Continue":"Fortsett","Begin life →":"Begynn livet →",
+ "Rename":"Endre navn","Appearance":"Utseende","Edit Appearance":"Endre utseende","Theme":"Tema","Sound Effects":"Lydeffekter","Name":"Navn","Light":"Lys","Dark":"Mørk","On":"På","Off":"Av",
+ "Locked":"Låst","Unlocked":"Opplåst","Unlock":"Lås opp","Unlock All":"Lås opp alt","Unlock DLC":"Lås opp DLC","Unlock Everything":"Lås opp alt","🎁 Unlock Everything":"🎁 Lås opp alt","🎁 DLC":"🎁 DLC",
+ "Entertainment DLC":"Underholdnings-DLC","Musician DLC":"Musiker-DLC","Politician DLC":"Politiker-DLC","Sports DLC":"Sports-DLC","Drug Empire DLC":"Narkotika-imperium-DLC","Mafia DLC":"Mafia-DLC","God Mode DLC":"Gudmodus-DLC",
+ "Turn On":"Slå på","Turn Off":"Slå av","Change":"Endre","Save Now":"Lagre nå","Export":"Eksporter","Import":"Importer","Delete":"Slett",
+ "🎛️ Audio & Game":"🎛️ Lyd og spill","Music, difficulty, text size, backup":"Musikk, vanskelighetsgrad, tekststørrelse, sikkerhetskopi",
+ "🎵 Music":"🎵 Musikk","🎼 Track":"🎼 Spor","Next Track":"Neste spor","🔊 Music Volume":"🔊 Musikkvolum","🔔 Effects Volume":"🔔 Effektvolum","🎚️ Difficulty":"🎚️ Vanskelighetsgrad",
+ "🔠 Text Size":"🔠 Tekststørrelse","🌗 High Contrast":"🌗 Høy kontrast","📳 Vibration":"📳 Vibrasjon","💾 Auto-save":"💾 Auto-lagring","💾 Save Now":"💾 Lagre nå",
+ "📤 Export Save":"📤 Eksporter lagring","📥 Import Save":"📥 Importer lagring","🗑️ Delete Saved Game":"🗑️ Slett lagret spill","🌐 Language":"🌐 Språk",
+ "Small":"Liten","Normal":"Normal","Large":"Stor","Extra large":"Ekstra stor","Easy":"Lett","Hard":"Vanskelig",
+ "💡 Suggestions":"💡 Forslag","Send Suggestion":"Send forslag","⭐ Rate The Ledger Life":"⭐ Vurder The Ledger Life","Rate on Google Play":"Vurder på Google Play","💡 Suggestion Box":"💡 Forslagsboks",
+ "🎯 Daily Goals":"🎯 Daglige mål","🏛️ Legacy Perks":"🏛️ Arveperks","Legacy Points":"Arvepoeng","🏛️ Spend Legacy Points":"🏛️ Bruk arvepoeng","Maxed":"Maks",
+ "📸 Share your life":"📸 Del livet ditt","Start a new life":"Start et nytt liv","✨ Revive (God Mode)":"✨ Gjenoppliv (Gudmodus)","THE LEDGER LIFE — FINAL ENTRY":"THE LEDGER LIFE — SISTE INNFØRING",
+ "🛡️ Insurance & Legal":"🛡️ Forsikring og jus","Buy policy":"Kjøp polise","Cancel policy":"Si opp polise","🏥 Health Insurance":"🏥 Helseforsikring","🏠 Home Insurance":"🏠 Boligforsikring","🚗 Car Insurance":"🚗 Bilforsikring",
+ "📚 More":"📚 Mer","📖 Life Journal":"📖 Livsjournal","📘 How to Play":"📘 Slik spiller du","🎲 Mini-Games":"🎲 Minispill","🏝️ Overseas Property":"🏝️ Eiendom i utlandet","🎯 Hobbies & Pet Shows":"🎯 Hobbyer og kjæledyrshow","🤝 Friends & Rivals":"🤝 Venner og rivaler",
+ "🃏 Blackjack":"🃏 Blackjack","📈 Market Sprint":"📈 Børssprint","🧠 Trivia Quiz":"🧠 Quiz","Play":"Spill","Play again":"Spill igjen","Hit":"Trekk","Stand":"Stå",
+ "🎯 Hobbies":"🎯 Hobbyer","Browse":"Se","Challenge":"Utfordre","Make peace":"Slutt fred","Friends":"Venner","Rivals":"Rivaler",
+ "Career Packs":"Karrierepakker","Free":"Gratis","Start":"Start","Work overtime":"Jobb overtid","Quit":"Slutt","Education":"Utdanning","Career":"Karriere",
+ "Currently Sick":"Syk nå","Doctor visit":"Legebesøk","What You Own":"Dette eier du","Take It Out":"Ta den ut",
+ "Health":"Helse","Happiness":"Lykke","Smarts":"Smarts","Looks":"Utseende","Karma":"Karma","Fame":"Berømmelse",
+ "Your name":"Ditt navn","Country of birth":"Fødeland","Gender":"Kjønn","Religion / Belief":"Religion / tro","Male":"Mann","Female":"Kvinne","Non-binary":"Ikke-binær",
+ "Hair color":"Hårfarge","Hairstyle":"Frisyre","Skin tone":"Hudfarge","Expression":"Uttrykk","Interested in":"Interessert i","Everyone":"Alle","Men":"Menn","Women":"Kvinner",
+ "A Life, Kept.":"Et liv, bevart.","Created by Aethelgard":"Laget av Aethelgard",
+ "Not enough cash.":"Ikke nok kontanter.","Game saved.":"Spillet er lagret.","Copied to clipboard.":"Kopiert til utklippstavlen.","Perk upgraded.":"Perk oppgradert.",
+};
+const NO_PATTERNS = [
+ [/^AGE (\d+)$/, "ALDER $1"],[/^Age (\d+)$/, "Alder $1"],[/^Net worth: (.+)$/, "Formue: $1"],
+ [/^Generation (\d+)$/, "Generasjon $1"],[/^(\d+) years? left$/, "$1 år igjen"],
+];
+function trNo(raw){
+  const k = raw.trim(); if(!k) return raw;
+  if(NO_DICT[k]) return raw.replace(k, NO_DICT[k]);
+  for(const [re,rep] of NO_PATTERNS){ if(re.test(k)) return raw.replace(k, k.replace(re,rep)); }
+  return raw;
+}
+const _origText = new WeakMap();
+let _trObserver = null, _trBusy = false;
+function _walkTranslate(root){
+  if(!root) return;
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  const nodes=[]; let n; while((n=w.nextNode())) nodes.push(n);
+  nodes.forEach(t=>{
+    const p = t.parentNode; if(!p || /^(SCRIPT|STYLE|TEXTAREA)$/.test(p.nodeName)) return;
+    if(PREFS.lang==="no"){
+      const cur = t.nodeValue; const prev = _origText.get(t);
+      if(prev!==undefined && cur===trNo(prev) ) return;
+      const out = trNo(cur);
+      if(out!==cur){ _origText.set(t, cur); t.nodeValue = out; }
+    } else {
+      const prev = _origText.get(t); if(prev!==undefined){ t.nodeValue = prev; _origText.delete(t); }
+    }
+  });
+}
+function applyLanguage(){
+  try{
+    if(!_trObserver){
+      _trObserver = new MutationObserver(()=>{
+        if(_trBusy || PREFS.lang!=="no") return;
+        _trBusy = true;
+        requestAnimationFrame(()=>{ try{ _trObserver.disconnect(); _walkTranslate(document.body); }finally{ _trObserver.observe(document.body,{childList:true,subtree:true,characterData:true}); _trBusy=false; } });
+      });
+    }
+    _trObserver.disconnect();
+    _walkTranslate(document.body);
+    if(PREFS.lang==="no") _trObserver.observe(document.body,{childList:true,subtree:true,characterData:true});
+    document.documentElement.lang = PREFS.lang==="no" ? "nb" : "en";
+  }catch(e){}
+}
+
+/* ===== ROUND 6A: STANDING TITLES, CEREMONIES, COLLECTIONS, HOME UPGRADES ===== */
+/* ---- ceremony overlay ---- */
+(function(){
+  const st = document.createElement("style");
+  st.textContent = `@keyframes cer-fall{0%{transform:translateY(-12vh) rotate(0);opacity:0}10%{opacity:1}100%{transform:translateY(110vh) rotate(360deg);opacity:.9}}
+  @keyframes cer-pop{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.08);opacity:1}100%{transform:scale(1)}}
+  #ceremony{position:fixed;inset:0;z-index:99999;background:rgba(5,6,8,.9);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px;text-align:center;overflow:hidden}
+  #ceremony .cer-bit{position:absolute;top:-10vh;font-size:22px;animation:cer-fall linear forwards;pointer-events:none}
+  #ceremony .cer-box{position:relative;animation:cer-pop .6s ease-out both;max-width:420px}
+  #ceremony .cer-ic{font-size:76px;line-height:1.1}
+  #ceremony h2{font-family:Georgia,serif;color:#e7d8a8;margin:14px 0 8px;font-size:28px}
+  #ceremony p{color:#cfc7b2;font-size:15px;line-height:1.5;margin:0 0 20px}`;
+  document.head.appendChild(st);
+})();
+let _cerQueue = [], _cerBusy = false;
+function ceremony(icon, title, text){
+  _cerQueue.push({icon,title,text}); _cerNext();
+}
+function _cerNext(tries){
+  if(_cerBusy || !_cerQueue.length) return;
+  tries = tries||0;
+  const modalOpen = document.getElementById("modal-backdrop").classList.contains("show");
+  const dead = document.getElementById("deathscreen").classList.contains("show");
+  if((modalOpen||dead) && tries<12){ setTimeout(()=>_cerNext(tries+1), 700); return; }
+  const c = _cerQueue.shift(); _cerBusy = true;
+  const bits = ["✨","🎉","⭐","🎊","💫"];
+  const div = document.createElement("div"); div.id = "ceremony";
+  let rain = ""; for(let i=0;i<26;i++){ rain += `<span class="cer-bit" style="left:${Math.random()*100}%; animation-duration:${3+Math.random()*3}s; animation-delay:${Math.random()*1.5}s;">${bits[i%bits.length]}</span>`; }
+  div.innerHTML = rain + `<div class="cer-box"><div class="cer-ic">${c.icon}</div><h2>${c.title}</h2><p>${c.text}</p><button class="btn gold" id="cer-ok">Continue</button></div>`;
+  document.body.appendChild(div);
+  try{ sfx("good"); }catch(e){}
+  if(PREFS.vibration && navigator.vibrate){ try{ navigator.vibrate([30,40,30]); }catch(e){} }
+  document.getElementById("cer-ok").onclick = ()=>{ div.remove(); _cerBusy=false; setTimeout(_cerNext, 250); };
+  if(PREFS.lang==="no") try{ applyLanguage(); }catch(e){}
+}
+/* ---- standing / titles ---- */
+const STANDING_TITLES = [
+ {min:0,   name:"Nobody",           icon:"🌱"},
+ {min:15,  name:"Newcomer",         icon:"🚶"},
+ {min:30,  name:"Local",            icon:"🏘️"},
+ {min:50,  name:"Familiar Face",    icon:"🙂"},
+ {min:70,  name:"Respected Name",   icon:"🎩"},
+ {min:90,  name:"Notable",          icon:"📰"},
+ {min:110, name:"Celebrated",       icon:"🌟"},
+ {min:130, name:"National Figure",  icon:"🏛️"},
+ {min:155, name:"Living Legend",    icon:"👑"},
+];
+function standingScore(){
+  const nw = Math.max(0, netWorth());
+  return Math.log10(nw+1)*10 + (S.fame||0)*0.6 + Object.keys(S.achievements||{}).length*1.2 + Math.min(S.age,80)*0.2;
+}
+function standingInfo(){
+  const sc = standingScore(); let idx = 0;
+  STANDING_TITLES.forEach((t,i)=>{ if(sc>=t.min) idx=i; });
+  const cur = STANDING_TITLES[idx], next = STANDING_TITLES[idx+1];
+  const pct = next ? clamp(Math.round((sc-cur.min)/(next.min-cur.min)*100),0,100) : 100;
+  return {idx, cur, next, pct, score:Math.round(sc)};
+}
+function standingTick(){
+  const info = standingInfo();
+  if(S._titleIdx===undefined){ S._titleIdx = info.idx; return; }
+  if(info.idx>S._titleIdx){
+    S._titleIdx = info.idx;
+    log(`You are now known as "${info.cur.name}" — a new title.`);
+    ceremony(info.cur.icon, info.cur.name, `Your standing has grown. People now know you as "${info.cur.name}".`);
+  } else if(info.idx<S._titleIdx){ S._titleIdx = info.idx; }
+}
+/* ---- big-moment ceremonies via achievements ---- */
+const CEREMONY_ACH = {six_figures:["💵","Six Figures","You've reached a net worth of $100,000."], multi_millionaire:["💰","Multi-Millionaire","Your net worth has passed $10,000,000."],
+  billionaire:["🏆","Billionaire","A net worth of one billion dollars. History will remember."], fortune500:["🏢","Fortune 500","Your company is now worth $5,000,000+."],
+  dynasty:["🏰","Dynasty","Three generations of your family. A true legacy."], centenarian:["🎂","Centenarian","You made it to 100."]};
+log = (function(orig){ return function(text){
+  orig.apply(this, arguments);
+  try{
+    if(typeof text==="string"){
+      const m = text.match(/^🏆 Achievement unlocked: (.+)$/);
+      if(m){ const a = ACHIEVEMENTS.find(x=>x.name===m[1]); if(a && CEREMONY_ACH[a.id]){ const c=CEREMONY_ACH[a.id]; ceremony(c[0],c[1],c[2]); } }
+      const t = text.match(/^You reached the top of (.+)\.$/);
+      if(t) ceremony("🏅","Top of the Ladder",`You reached the highest rank in ${t[1]}.`);
+    }
+  }catch(e){}
+}; })(log);
+
+/* ---- collections ---- */
+const COLLECT_CATS = {
+  art:   {icon:"🖼️", name:"Art",     lo:-0.05, hi:0.14, items:[{id:"print",n:"Limited Print",c:2000},{id:"paint",n:"Oil Painting",c:15000},{id:"master",n:"Masterpiece",c:250000}]},
+  watch: {icon:"⌚", name:"Watches", lo:-0.03, hi:0.10, items:[{id:"wa",n:"Classic Watch",c:1500},{id:"wb",n:"Swiss Chronograph",c:12000},{id:"wc",n:"Rare Heirloom Watch",c:90000}]},
+  wine:  {icon:"🍷", name:"Wine",    lo:0.02,  hi:0.09, items:[{id:"va",n:"Fine Vintage",c:500},{id:"vb",n:"Grand Cru Case",c:5000},{id:"vc",n:"Legendary Bottle",c:40000}]},
+};
+function collItems(){ S.collection = S.collection||[]; return S.collection; }
+function collectionValue(){ return (S.collection||[]).reduce((a,i)=>a+i.value,0); }
+netWorth = (function(orig){ return function(){ let v = orig.apply(this, arguments); try{ v += collectionValue(); }catch(e){} return v; }; })(netWorth);
+function openCollections(){
+  if(S.age<18){ showToast("Collecting is for adults."); return; }
+  const mine = collItems();
+  openModal(`<h3>🖼️ Collections</h3><div class="modal-sub">Collectibles change in value every year. Your collection counts toward net worth. You own ${mine.length} item${mine.length===1?'':'s'} worth ${fmt(collectionValue())}.</div>
+    ${mine.length?`<div class="section-title">Your collection</div>`+mine.map((it,i)=>`<div class="card"><div class="card-row"><div><div class="card-title">${COLLECT_CATS[it.cat].icon} ${it.n}</div><div class="card-sub">Paid ${fmt(it.paid)} · now ${fmt(it.value)} (${it.value>=it.paid?'+':''}${Math.round((it.value/it.paid-1)*100)}%)</div></div><button class="small-btn" data-sell="${i}">Sell</button></div></div>`).join(""):""}
+    ${Object.keys(COLLECT_CATS).map(k=>{ const c=COLLECT_CATS[k]; return `<div class="section-title" style="margin-top:12px;">${c.icon} ${c.name}</div>`+c.items.map(it=>`<div class="card"><div class="card-row"><div><div class="card-title">${it.n}</div><div class="card-sub">${fmt(it.c)}</div></div><button class="small-btn gold" data-buy="${k}:${it.id}" ${S.money<it.c?'disabled':''}>Buy</button></div></div>`).join(""); }).join("")}
+    <button class="btn secondary" id="close-modal-btn" style="margin-top:8px;">Close</button>`);
+  document.querySelectorAll("#modal [data-buy]").forEach(b=> b.onclick = ()=>{
+    const [k,id] = b.dataset.buy.split(":"); const it = COLLECT_CATS[k].items.find(x=>x.id===id);
+    if(S.money<it.c){ showToast("Not enough cash."); return; }
+    S.money -= it.c; S.collection.push({cat:k, id:it.id, n:it.n, paid:it.c, value:it.c});
+    log(`You bought ${it.n.toLowerCase()} for your collection.`); showToast(`Bought ${it.n}.`); openCollections(); renderAll();
+  });
+  document.querySelectorAll("#modal [data-sell]").forEach(b=> b.onclick = ()=>{
+    const i = Number(b.dataset.sell), it = S.collection[i]; S.money += it.value; S.collection.splice(i,1);
+    log(`You sold ${it.n.toLowerCase()} for ${fmt(it.value)}.`); showToast(`Sold ${it.n} for ${fmt(it.value)}.`); openCollections(); renderAll();
+  });
+  document.getElementById("close-modal-btn").onclick = closeModal;
+}
+MORE_ITEMS.push({icon:"🖼️", title:"Collections", sub:"Art, watches and wine that grow in value", open:openCollections});
+ACHIEVEMENTS.push({id:"collector", name:"Collector", desc:"Own 10 collectibles at once.", cond:s=>(s.collection||[]).length>=10});
+ACHIEVEMENTS.push({id:"connoisseur", name:"Connoisseur", desc:"Own art, a watch and wine at the same time.", cond:s=>["art","watch","wine"].every(k=>(s.collection||[]).some(i=>i.cat===k))});
+
+/* ---- home upgrades ---- */
+const HOME_UPGRADES = [
+ {id:"garden",  icon:"🌳", name:"Garden",       cost:6000,  fx:"+1 happiness / year",           yearly:()=>adjStat("happiness",1), boost:0.02},
+ {id:"gym",     icon:"🏋️", name:"Home Gym",     cost:9000,  fx:"+1 health / year",              yearly:()=>adjStat("health",1),    boost:0.02},
+ {id:"library", icon:"📚", name:"Library",      cost:12000, fx:"Smarts grow slowly",            yearly:()=>{ if(chance(0.4)) adjStat("smarts",1); }, boost:0.02},
+ {id:"studio",  icon:"🎙️", name:"Home Studio",  cost:20000, fx:"+1 happiness, small income",     yearly:()=>{ adjStat("happiness",1); S.money+=1500; }, boost:0.03},
+ {id:"pool",    icon:"🏊", name:"Swimming Pool",cost:35000, fx:"+2 happiness / year",           yearly:()=>adjStat("happiness",2), boost:0.05},
+ {id:"smart",   icon:"🏠", name:"Smart Home",   cost:15000, fx:"Saves $800 / year",              yearly:()=>{ S.money+=800; }, boost:0.04},
+];
+function openHomeUpgrades(){
+  const home = S.houses.find(h=>h.status==="primary");
+  if(!home){ showToast("You need a primary home first."); return; }
+  S.homeUp = S.homeUp||{};
+  openModal(`<h3>🏡 Home Upgrades</h3><div class="modal-sub">Improve ${home.name}. Upgrades give yearly benefits and raise the property's value.</div>
+    ${HOME_UPGRADES.map(u=>{ const own=!!S.homeUp[u.id]; return `<div class="card"><div class="card-row"><div><div class="card-title">${u.icon} ${u.name}</div><div class="card-sub">${u.fx} · +${Math.round(u.boost*100)}% property value</div></div>
+      <button class="small-btn ${own?'':'gold'}" data-up="${u.id}" ${own||S.money<u.cost?'disabled':''}>${own?'Owned':`Build (${fmt(u.cost)})`}</button></div></div>`; }).join("")}
+    <button class="btn secondary" id="close-modal-btn" style="margin-top:8px;">Close</button>`);
+  document.querySelectorAll("#modal [data-up]").forEach(b=> b.onclick = ()=>{
+    const u = HOME_UPGRADES.find(x=>x.id===b.dataset.up); if(S.money<u.cost) return;
+    S.money -= u.cost; S.homeUp[u.id]=true; if(home.value===undefined) home.value=home.cost; home.value = Math.round(home.value*(1+u.boost));
+    log(`You built a ${u.name.toLowerCase()} at your home.`); showToast(`${u.name} built.`); openHomeUpgrades(); renderAll();
+  });
+  document.getElementById("close-modal-btn").onclick = closeModal;
+}
+MORE_ITEMS.push({icon:"🏡", title:"Home Upgrades", sub:"Garden, gym, pool and more", open:openHomeUpgrades});
+ACHIEVEMENTS.push({id:"dream_home", name:"Dream Home", desc:"Build every home upgrade.", cond:s=>HOME_UPGRADES.every(u=>(s.homeUp||{})[u.id])});
+
+/* ---- yearly + life tab ---- */
+ageUp = (function(orig){ return function(){
+  const r = orig.apply(this, arguments);
+  try{
+    if(S && S.alive){
+      (S.collection||[]).forEach(it=>{ const c=COLLECT_CATS[it.cat]; const g = c.lo + Math.random()*(c.hi-c.lo); it.value = Math.max(Math.round(it.paid*0.2), Math.round(it.value*(1+g))); });
+      const hasHome = S.houses.some(h=>h.status==="primary");
+      if(hasHome) HOME_UPGRADES.forEach(u=>{ if((S.homeUp||{})[u.id]) { try{ u.yearly(); }catch(e){} } });
+      standingTick();
+    }
+  }catch(e){}
+  return r;
+}; })(ageUp);
+RENDERERS.life = (function(orig){ return function(){
+  const w = orig.apply(this, arguments);
+  try{
+    if(w && w.appendChild && S.age>=10){
+      const si = standingInfo();
+      const c = el(`<div class="card"><div class="card-row"><div class="card-title">${si.cur.icon} ${si.cur.name}</div><div class="card-sub">Standing ${si.score}</div></div>
+        <div class="bar" style="margin-top:6px;"><div class="fill" style="width:${si.pct}%; background:var(--gold);"></div></div>
+        <div class="card-sub" style="margin-top:4px;">${si.next?`Next title: ${si.next.name}`:'The highest title.'}</div></div>`);
+      w.insertBefore(c, w.children[1]||null);
+    }
+  }catch(e){}
+  return w;
+}; })(RENDERERS.life);
+
+/* ===== ROUND 6B: REPUTATION, HEADLINES, NEIGHBOURS, EVENT CHAINS, DYNASTY GOALS, MONTHLY CHALLENGE ===== */
+/* ---- reputation per country ---- */
+function repLabel(v){ return v>=70?"Revered":v>=40?"Respected":v>=15?"Well-liked":v>-15?"Unknown":v>-40?"Distrusted":v>-70?"Notorious":"Despised"; }
+function repTick(){
+  S.repBy = S.repBy||{};
+  const k = S.karma||0, cr = S.crimeCount||0;
+  const dk = k-(S._rk===undefined?k:S._rk), dc = cr-(S._rc===undefined?cr:S._rc);
+  S._rkPrevCrime = dc;
+  S._rk = k; S._rc = cr;
+  const d = clamp(Math.round(dk - dc*3 + ((S.fame||0)>=30?1:0)), -10, 10);
+  S.repBy[S.country] = clamp((S.repBy[S.country]||0)+d, -100, 100);
+  const v = S.repBy[S.country];
+  if(v>=40) adjStat("happiness",1); else if(v<=-40) adjStat("happiness",-1);
+}
+/* ---- headlines ---- */
+const _HL_COOL = {};
+function _hlCandidates(){
+  const n = S.name, nw = netWorth(), c = [];
+  const once = (key,cond,text)=>{ if(cond && !(S._hlUsed||{})[key]) c.push({key,text,once:true}); };
+  const rep  = (key,cond,text,cool)=>{ if(cond && (S.age-((S._hlLast||{})[key]||-99))>=cool) c.push({key,text}); };
+  once("m1", nw>=1e6, `${n} joins the millionaires' club.`);
+  once("m10", nw>=1e7, `${n} named among the country's wealthiest.`);
+  once("b1", nw>=1e9, `${n} becomes a billionaire. Markets take notice.`);
+  rep("gala", (S.fame||0)>=40, `${n} spotted at a glamorous gala.`, 8);
+  rep("police", (S._rkPrevCrime||0)>0, `Police question ${n} in a developing case.`, 4);
+  rep("gen", (S.karma||0)>=20, `${n} praised for generosity.`, 10);
+  rep("ethics", (S.karma||0)<=-15, `Questions raised about ${n}'s ethics.`, 10);
+  if(S.job && S.job.track==="pack" && S.job.level>=4){ const p=_packById(S.job.pack); if(p) rep("pack"+S.job.pack, true, `${n} rises through the ranks in ${p.name}.`, 6); }
+  (S.rivals||[]).forEach(r=>{ rep("riv"+r.name, r.won>r.lost, `${n} outshines rival ${r.name}.`, 6); });
+  if(S.world){ const w=WORLD_EVENTS.find(e=>e.id===S.world.id); if(w) rep("w"+S.world.id, true, `${w.name} grips the nation; ${n} weighs the options.`, 3); }
+  rep("old", S.age>=80, `${n}, ${S.age}, still going strong.`, 5);
+  rep("fam", S.children.filter(x=>x.alive).length>=3, `${n}'s growing family is the talk of the neighbourhood.`, 10);
+  rep("col", (S.collection||[]).length>=5, `${n}'s private collection draws admirers.`, 8);
+  rep("quiet", true, `A quiet year for ${n}.`, 6);
+  return c;
+}
+function headlineTick(){
+  S.headlines = S.headlines||[]; S._hlUsed = S._hlUsed||{}; S._hlLast = S._hlLast||{};
+  if(S.age<16 || !chance(0.45)) return;
+  const cands = _hlCandidates(); if(!cands.length) return;
+  const real = cands.filter(x=>x.key!=="quiet"); const pool = real.length?real:cands;
+  const pick = pool[rand(0,pool.length-1)];
+  S.headlines.unshift({age:S.age, text:pick.text}); if(S.headlines.length>30) S.headlines.pop();
+  if(pick.once) S._hlUsed[pick.key]=true; S._hlLast[pick.key]=S.age;
+}
+function openHeadlines(){
+  const hl = S.headlines||[];
+  openModal(`<h3>📰 Headlines</h3><div class="modal-sub">What the papers say about you.</div>
+    ${hl.length?hl.map(h=>`<div class="feed-item"><span class="age-mark">AGE ${h.age}</span>${h.text}</div>`).join(""):`<div class="empty-note">Nothing in the news yet.</div>`}
+    <button class="btn secondary" id="close-modal-btn" style="margin-top:8px;">Close</button>`);
+  document.getElementById("close-modal-btn").onclick = closeModal;
+}
+MORE_ITEMS.push({icon:"📰", title:"Headlines", sub:"What the papers say about you", open:openHeadlines});
+
+/* ---- neighbours ---- */
+const NB_FIRST = ["Astrid","Bjorn","Clara","Dmitri","Elena","Farid","Greta","Hugo","Ines","Jonas","Kaito","Lena","Marco","Nora","Omar","Petra","Rafael","Sofia","Tomas","Una"];
+const NB_LAST  = ["Hale","Lindgren","Moreau","Okafor","Petrov","Quinn","Rossi","Silva","Tanaka","Vogel","Walsh","Yilmaz"];
+const NB_TRAITS = [{id:"friendly",t:"Friendly"},{id:"grumpy",t:"Grumpy"},{id:"nosy",t:"Nosy"},{id:"generous",t:"Generous"},{id:"quirky",t:"Quirky"}];
+function ensureNeighbours(){
+  S.neighbours = S.neighbours||{};
+  if(!S.neighbours[S.country]){
+    const used = new Set(); const list=[];
+    while(list.length<5){ const nm=`${NB_FIRST[rand(0,NB_FIRST.length-1)]} ${NB_LAST[rand(0,NB_LAST.length-1)]}`; if(used.has(nm)) continue; used.add(nm); list.push({name:nm, trait:NB_TRAITS[rand(0,NB_TRAITS.length-1)].id, bond:rand(5,25), a:0}); }
+    S.neighbours[S.country] = list;
+  }
+  return S.neighbours[S.country];
+}
+function openNeighbours(){
+  const list = ensureNeighbours();
+  const tname = id=>(NB_TRAITS.find(x=>x.id===id)||{}).t;
+  openModal(`<h3>🏘️ Your Neighbourhood — ${S.country}</h3><div class="modal-sub">The same faces, year after year. Be a good neighbour and they'll remember it.</div>
+    ${list.map((n,i)=>`<div class="card"><div class="card-row"><div><div class="card-title">${n.name}</div><div class="card-sub">${tname(n.trait)} · bond ${n.bond}/100</div></div></div>
+      <div class="btn-row" style="margin-top:8px;"><button class="small-btn gold" data-nb="chat:${i}" ${n.a>=2?'disabled':''}>Chat</button><button class="small-btn" data-nb="help:${i}" ${n.a>=2?'disabled':''}>Help out</button><button class="small-btn" data-nb="borrow:${i}" ${n.bond<40||n.a>=2?'disabled':''}>Ask a favour</button></div></div>`).join("")}
+    <button class="btn secondary" id="close-modal-btn" style="margin-top:8px;">Close</button>`);
+  document.querySelectorAll("#modal [data-nb]").forEach(b=> b.onclick = ()=>{
+    const [act,i] = b.dataset.nb.split(":"); const n = list[Number(i)]; if(n.a>=2) return; n.a++;
+    let m="";
+    if(act==="chat"){ n.bond=clamp(n.bond+(n.trait==="grumpy"?2:6),0,100); adjStat("happiness",n.trait==="friendly"?3:2); m=`You chatted with ${n.name} over the fence.`; }
+    else if(act==="help"){ n.bond=clamp(n.bond+9,0,100); S.karma=(S.karma||0)+1; adjStat("health",-1); m=`You helped ${n.name} with a chore.`; }
+    else { if(chance(n.trait==="generous"?0.85:0.55)){ const a=rand(200,900); S.money+=a; n.bond=clamp(n.bond-5,0,100); m=`${n.name} lent you ${fmt(a)}.`; } else { n.bond=clamp(n.bond-10,0,100); m=`${n.name} turned you down. Awkward.`; } }
+    log(m); showToast(m); openNeighbours(); renderAll();
+  });
+  document.getElementById("close-modal-btn").onclick = closeModal;
+}
+MORE_ITEMS.push({icon:"🏘️", title:"Neighbourhood", sub:"The people who live around you", open:openNeighbours});
+LIFE_EVENTS.push({id:"nbhelp", w:2, cond:()=>S.age>=18, title:"🏘️ A Neighbour Needs a Hand",
+  text:()=>{ const l=ensureNeighbours(); S._evtNb = l[rand(0,l.length-1)]; return `${S._evtNb.name} is locked out and asks if you can help.`; },
+  options:[
+   {label:()=>"Help them", run:()=>{ S._evtNb.bond=clamp(S._evtNb.bond+10,0,100); S.karma=(S.karma||0)+2; return `${S._evtNb.name} won't forget it.`; }},
+   {label:()=>"Sorry, busy", run:()=>{ S._evtNb.bond=clamp(S._evtNb.bond-6,0,100); return `${S._evtNb.name} found another way. The silence is noted.`; }},
+  ]});
+LIFE_EVENTS.push({id:"blockparty", w:1, cond:()=>S.age>=14, title:"🎈 Block Party",
+  text:()=>"The whole street is throwing a party this weekend.",
+  options:[
+   {label:()=>"Join in", run:()=>{ ensureNeighbours().forEach(n=>{ n.bond=clamp(n.bond+3,0,100); }); adjStat("happiness",6); return "You met everyone on the street. It was a great evening."; }},
+   {label:()=>"Stay inside", run:()=>"You stayed in. The music carried on without you."},
+  ]});
+
+/* ---- event chains ---- */
+function scheduleChain(id, lo, hi){ S.chains = S.chains||[]; S.chains.push({id, due:S.age+rand(lo,hi)}); }
+const CHAIN_EVENTS = {
+ appeal:{title:"⚖️ Appeal Window", text:()=>"Your lawyer says you can still appeal the earlier verdict.", options:[
+   {label:()=>`File an appeal (${fmt(8000)})`, run:()=>{ spendOrDebt(8000); if(chance(0.4)){ S.money+=15000; return "The appeal succeeded — you recovered $15,000."; } return "The appeal was rejected."; }},
+   {label:()=>"Let it go", run:()=>"You let the matter rest."}]},
+ countersuit:{title:"💼 The Other Side Fights Back", text:()=>"The party you beat in court has filed a counterclaim.", options:[
+   {label:()=>`Hire a lawyer (${fmt(4000)})`, run:()=>{ spendOrDebt(4000); if(chance(0.7)){ return "The counterclaim was dismissed."; } spendOrDebt(6000); return "The counterclaim got through. You paid $6,000."; }},
+   {label:()=>"Ignore it", run:()=>{ if(chance(0.3)){ spendOrDebt(10000); return "A default judgment cost you $10,000."; } return "Nothing came of it."; }}]},
+ favour:{title:"🕴️ The Favour", text:()=>"The stranger from the briefcase is back, and now it's time to repay the 'favour'.", options:[
+   {label:()=>"Do the favour", run:()=>{ S.money+=30000; S.karma=(S.karma||0)-4; S.crimeCount=(S.crimeCount||0)+1; if(chance(0.15)){ S.criminalRecord=true; return "You did it, got paid $30,000 — and it came back on you."; } return "You did what was asked and were paid $30,000."; }},
+   {label:()=>"Refuse", run:()=>{ if(chance(0.5)){ adjStat("health",-10); return "Your refusal was met with a beating."; } return "They shrugged and left. For now."; }}]},
+ investigation:{title:"🔍 Regulators Call", text:()=>"Regulators are asking questions about an old trade of yours.", options:[
+   {label:()=>"Face the music", run:()=>{ if(chance(0.55)){ spendOrDebt(40000); S.karma=(S.karma||0)-2; return "An investigation fined you $40,000."; } return "They found nothing. You exhale."; }}]},
+ cousin:{title:"🤝 Your Cousin Returns", text:()=>"Your cousin turns up on your doorstep.", options:[
+   {label:()=>"Welcome them", run:()=>{ if(chance(0.6)){ S.money+=5000; S.karma=(S.karma||0)+2; return "They finally repaid you — with interest. Family matters."; } adjStat("happiness",2); return "They had no money, but you shared a good evening."; }},
+   {label:()=>"Keep your distance", run:()=>{ S.karma=(S.karma||0)-1; return "You kept your distance."; }}]},
+ official:{title:"🏛️ The Official Wants More", text:()=>"The official you bribed years ago is back, hinting at a bigger 'fee'.", options:[
+   {label:()=>`Pay up (${fmt(15000)})`, run:()=>{ spendOrDebt(15000); S.crimeCount=(S.crimeCount||0)+1; return "You paid again. It won't be the last time."; }},
+   {label:()=>"Refuse", run:()=>{ if(chance(0.4)){ spendOrDebt(8000); return "A permit of yours was revoked. It cost $8,000."; } return "They backed off. This time."; }}]},
+ relatives:{title:"💌 Relatives Come Calling", text:()=>"Word of your windfall has spread. Distant relatives are suddenly very friendly.", options:[
+   {label:()=>`Give ${fmt(2000)}`, run:()=>{ spendOrDebt(2000); S.karma=(S.karma||0)+2; adjStat("happiness",3); return "You shared a little. Everyone left smiling."; }},
+   {label:()=>"Decline politely", run:()=>{ S.karma=(S.karma||0)-1; return "You politely turned them away."; }}]},
+ kidproud:{title:"🎓 A Proud Moment", text:()=>"One of your children has achieved something wonderful.", options:[
+   {label:()=>"Celebrate", run:()=>{ adjStat("happiness",8); S.money+=1000; return "A proud, happy day — and a small gift from your child."; }}]},
+};
+function chainWrap(evId, optIdx, fn){
+  const ev = LIFE_EVENTS.find(e=>e.id===evId); if(!ev || !ev.options[optIdx]) return;
+  const o = ev.options[optIdx], orig = o.run;
+  o.run = function(){ const before = {lost:(S.legal||{}).lost||0, won:(S.legal||{}).won||0}; const m = orig.apply(this, arguments); try{ fn(before); }catch(e){} return m; };
+}
+chainWrap("sued",1,b=>{ if(S.legal.lost>b.lost) scheduleChain("appeal",1,2); else if(S.legal.won>b.won) scheduleChain("countersuit",1,2); });
+chainWrap("sued",2,b=>{ if(S.legal.lost>b.lost) scheduleChain("appeal",1,2); });
+chainWrap("briefcase",0,()=>scheduleChain("favour",2,4));
+chainWrap("insider",0,()=>scheduleChain("investigation",1,3));
+chainWrap("relative",0,()=>scheduleChain("cousin",2,3));
+chainWrap("bribe",0,()=>scheduleChain("official",2,4));
+chainWrap("windfall",0,()=>scheduleChain("relatives",1,2));
+chainWrap("kidtrouble",0,()=>scheduleChain("kidproud",3,5));
+chainWrap("kidtrouble",1,()=>scheduleChain("kidproud",3,5));
+function chainTick(){
+  if(!S || !S.alive || !S.chains || !S.chains.length) return;
+  if(document.getElementById("modal-backdrop").classList.contains("show")) return;
+  const i = S.chains.findIndex(c=>S.age>=c.due); if(i<0) return;
+  const c = S.chains.splice(i,1)[0]; const ev = CHAIN_EVENTS[c.id]; if(!ev) return;
+  if(c.id==="kidproud" && !S.children.some(k=>k.alive)) return;
+  showLifeEvent(ev);
+}
+lifeEventsTick = (function(orig){ return function(){ try{ chainTick(); }catch(e){} return orig.apply(this, arguments); }; })(lifeEventsTick);
+
+/* ---- dynasty goals + collection book ---- */
+function dynUpdate(){
+  META.dyn = META.dyn||{maxGen:1, countries:{}, packs:{}, abroad:{}, bestColl:0};
+  const d = META.dyn;
+  d.maxGen = Math.max(d.maxGen||1, S.generation||1);
+  (S.countriesLived||[S.country]).forEach(c=>{ d.countries[c]=true; }); d.countries[S.country]=true;
+  (S.packsWorked||[]).forEach(p=>{ d.packs[p]=true; });
+  S.houses.filter(h=>h.abroad).forEach(h=>{ d.abroad[h.abroad]=true; });
+  d.bestColl = Math.max(d.bestColl||0, (S.collection||[]).length);
+  META.bestNW = Math.max(META.bestNW||0, Math.round(netWorth()));
+}
+const DYN_GOALS = [
+ {id:"fortune", name:"Family Fortune", desc:"Reach a net worth of $100,000,000 in a single life.", reward:15, prog:()=>({cur:Math.min(META.bestNW||0,1e8), max:1e8, money:true})},
+ {id:"gen5", name:"Five Generations", desc:"Carry the family to the fifth generation.", reward:10, prog:()=>({cur:META.dyn.maxGen||1, max:5})},
+ {id:"allpacks", name:"Every Career", desc:"Work in all eight Career Packs.", reward:12, prog:()=>({cur:Object.keys(META.dyn.packs).length, max:CAREER_PACKS.length})},
+ {id:"world", name:"Citizen of the World", desc:"Live in 8 different countries.", reward:8, prog:()=>({cur:Object.keys(META.dyn.countries).length, max:8})},
+ {id:"endings", name:"Every Ending", desc:"Discover every ending.", reward:15, prog:()=>({cur:Object.keys(META.endingsSeen||{}).length, max:ENDINGS.length})},
+ {id:"empire", name:"Property Empire", desc:"Own property in 5 different foreign countries over your lives.", reward:8, prog:()=>({cur:Object.keys(META.dyn.abroad).length, max:5})},
+ {id:"gallery", name:"Grand Collection", desc:"Own 20 collectibles at once.", reward:6, prog:()=>({cur:META.dyn.bestColl||0, max:20})},
+ {id:"memory", name:"Long Memory", desc:"Live 10 lives.", reward:6, prog:()=>({cur:META.lives||0, max:10})},
+];
+function dynTick(){
+  dynUpdate(); META.goalsDone = META.goalsDone||{};
+  DYN_GOALS.forEach(g=>{
+    if(META.goalsDone[g.id]) return; const p=g.prog();
+    if(p.cur>=p.max){ META.goalsDone[g.id]=true; META.points+=g.reward; showToast(`Dynasty goal complete: ${g.name} (+${g.reward} pts)`); ceremony("🏛️", g.name, `${g.desc} +${g.reward} Legacy Points.`); }
+  });
+  saveMeta();
+}
+function openDynasty(){
+  dynUpdate(); META.goalsDone = META.goalsDone||{};
+  const chips = (names, have)=> names.map(n=>`<span class="tag" style="opacity:${have(n)?1:0.4}; margin:2px; display:inline-block;">${have(n)?'✓':'○'} ${n}</span>`).join(" ");
+  openModal(`<h3>🏛️ Dynasty Goals</h3><div class="modal-sub">Long goals that stretch across many lives. Each pays out Legacy Points once.</div>
+    ${DYN_GOALS.map(g=>{ const p=g.prog(), done=!!META.goalsDone[g.id], pct=Math.round(Math.min(p.cur,p.max)/p.max*100);
+      return `<div class="card" style="${done?'border-color:var(--gold);':''}"><div class="card-row"><div class="card-title">${done?'✅':'🎯'} ${g.name}</div><div class="money">+${g.reward}</div></div><div class="card-sub">${g.desc}</div>
+      <div class="bar" style="margin-top:6px;"><div class="fill" style="width:${pct}%; background:var(--gold);"></div></div><div class="card-sub">${p.money?fmt(p.cur)+' / '+fmt(p.max):Math.min(p.cur,p.max)+' / '+p.max}</div></div>`; }).join("")}
+    <div class="section-title" style="margin-top:12px;">Collection Book</div>
+    <div class="card"><div class="card-title">🌍 Countries lived in</div><div style="margin-top:6px;">${chips(COUNTRIES, n=>META.dyn.countries[n])}</div></div>
+    <div class="card"><div class="card-title">💼 Career Packs tried</div><div style="margin-top:6px;">${chips(CAREER_PACKS.map(p=>p.name), n=>{ const p=CAREER_PACKS.find(x=>x.name===n); return META.dyn.packs[p.id]; })}</div></div>
+    <div class="card"><div class="card-title">📜 Endings found</div><div style="margin-top:6px;">${chips(ENDINGS.map(e=>e.name), n=>{ const e=ENDINGS.find(x=>x.name===n); return (META.endingsSeen||{})[e.id]; })}</div></div>
+    <button class="btn secondary" id="close-modal-btn" style="margin-top:8px;">Close</button>`);
+  document.getElementById("close-modal-btn").onclick = closeModal;
+}
+MORE_ITEMS.push({icon:"🏛️", title:"Dynasty Goals", sub:"Long goals and your collection book", open:openDynasty});
+
+/* ---- monthly challenge ---- */
+const MONTH_TYPES = [{id:"years", name:"Live 120 years this month", target:120},{id:"events", name:"Resolve 12 life events this month", target:12},{id:"ach", name:"Unlock 4 achievements this month", target:4}];
+function ensureMonthly(){
+  const d=new Date(), key=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
+  if(!META.monthly || META.monthly.key!==key){ const t = MONTH_TYPES[d.getMonth()%MONTH_TYPES.length]; META.monthly = {key, type:t.id, name:t.name, target:t.target, progress:0, done:false}; saveMeta(); }
+  return META.monthly;
+}
+function monthlyAdd(type, n){
+  const m = ensureMonthly(); if(m.done || m.type!==type) return;
+  m.progress += (n||1);
+  if(m.progress>=m.target){ m.done=true; META.points += 5; showToast("🗓️ Monthly challenge complete! +5 points"); ceremony("🗓️","Monthly Challenge",`${m.name} — complete! +5 Legacy Points.`); }
+  saveMeta();
+}
+showLifeEvent = (function(orig){ return function(ev){ try{ monthlyAdd("events",1); }catch(e){} return orig.apply(this, arguments); }; })(showLifeEvent);
+log = (function(orig){ return function(text){ orig.apply(this, arguments); try{ if(typeof text==="string" && /^🏆 Achievement unlocked/.test(text)) monthlyAdd("ach",1); }catch(e){} }; })(log);
+openDailyModal = (function(orig){ return function(){
+  orig.apply(this, arguments);
+  try{
+    const m = ensureMonthly(); const btn = document.querySelector("#modal #daily-legacy-btn");
+    if(btn) btn.insertAdjacentHTML("beforebegin", `<div class="card" style="${m.done?'border-color:var(--gold);':''}"><div class="card-title">${m.done?'✅':'🗓️'} Monthly Challenge</div><div class="card-sub">${m.name} — ${Math.min(m.progress,m.target)} / ${m.target} · reward 5 points</div></div>`);
+  }catch(e){}
+}; })(openDailyModal);
+
+/* ---- yearly wiring + life tab cards ---- */
+ageUp = (function(orig){ return function(){
+  const r = orig.apply(this, arguments);
+  try{
+    if(S && S.alive){
+      repTick(); headlineTick(); dynTick(); monthlyAdd("years",1);
+    }
+  }catch(e){}
+  return r;
+}; })(ageUp);
+RENDERERS.life = (function(orig){ return function(){
+  const w = orig.apply(this, arguments);
+  try{
+    if(w && w.appendChild && S.age>=14){
+      const v = (S.repBy||{})[S.country]||0;
+      const c = el(`<div class="card"><div class="card-row"><div class="card-title">🌍 Reputation in ${S.country}</div><div class="card-sub">${repLabel(v)} (${v>0?'+':''}${v})</div></div></div>`);
+      w.insertBefore(c, w.children[2]||null);
+    }
+  }catch(e){}
+  return w;
+}; })(RENDERERS.life);
 
 init();
 if("serviceWorker" in navigator){
